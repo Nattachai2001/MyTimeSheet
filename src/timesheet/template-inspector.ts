@@ -1,3 +1,4 @@
+import "./exceljs-bootstrap.js";
 import ExcelJS from "exceljs";
 
 import { cellText, detectOvertimeMapping, detectTimesheetMapping } from "./template-mapper.js";

@@ -1,3 +1,4 @@
+import "./exceljs-bootstrap.js";
 import ExcelJS from "exceljs";
 
 import { AppConfig } from "../config/env.js";

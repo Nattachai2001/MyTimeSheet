@@ -1,3 +1,4 @@
+import "../timesheet/exceljs-bootstrap.js";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, shell, Tray } from "electron";
 import { execFile } from "node:child_process";
 import fs from "node:fs/promises";

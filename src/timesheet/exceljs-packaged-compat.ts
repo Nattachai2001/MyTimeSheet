@@ -8,9 +8,15 @@ let applied = false;
 
 export function ensureExcelJsPackagedCompat(): void {
   if (applied) return;
-  applied = true;
 
   const modulePath = require.resolve("exceljs/lib/utils/parse-sax.js");
+  require(modulePath);
+  const cacheEntry = require.cache[modulePath];
+  if (!cacheEntry) {
+    return;
+  }
+
+  applied = true;
   const { bufferToString } = require("exceljs/lib/utils/browser-buffer-decode") as {
     bufferToString: (value: unknown) => string;
   };
@@ -19,7 +25,7 @@ export function ensureExcelJsPackagedCompat(): void {
     PassThrough: typeof PassThrough;
   };
 
-  require.cache[modulePath]!.exports = async function* patchedParseSax(iterable: unknown) {
+  cacheEntry.exports = async function* patchedParseSax(iterable: unknown) {
     const source = await normalizeIterable(iterable, LegacyPassThrough);
     const saxesParser = new SaxesParser();
     let error: Error | undefined;
@@ -50,35 +56,12 @@ async function normalizeIterable(
   iterable: unknown,
   PassThroughCtor: typeof PassThrough
 ): Promise<AsyncIterable<unknown>> {
-  if (iterable != null && typeof (iterable as AsyncIterable<unknown>)[Symbol.asyncIterator] === "function") {
-    return iterable as AsyncIterable<unknown>;
-  }
-
-  if (iterable != null && typeof (iterable as Readable).pipe === "function") {
-    return (iterable as Readable).pipe(new PassThroughCtor()) as unknown as AsyncIterable<unknown>;
+  if (iterable == null) {
+    throw new TypeError("iterable is not async iterable");
   }
 
   if (isReadable(iterable)) {
-    const chunks: Buffer[] = [];
-    let chunk: Buffer | string | null;
-    while ((chunk = iterable.read()) !== null) {
-      chunks.push(toBuffer(chunk));
-    }
-
-    if (!chunks.length && !iterable.readableEnded) {
-      await new Promise<void>((resolve, reject) => {
-        iterable.on("data", (data) => {
-          chunks.push(toBuffer(data));
-        });
-        iterable.on("error", reject);
-        iterable.on("end", () => resolve());
-      });
-    }
-
-    const bytes = Buffer.concat(chunks);
-    return (async function* singleChunk() {
-      yield bytes;
-    })();
+    return drainReadableToAsyncIterable(iterable);
   }
 
   if (typeof iterable === "string" || Buffer.isBuffer(iterable)) {
@@ -96,7 +79,38 @@ async function normalizeIterable(
     })();
   }
 
+  if (typeof (iterable as Readable).pipe === "function") {
+    return drainReadableToAsyncIterable((iterable as Readable).pipe(new PassThroughCtor()));
+  }
+
+  if (typeof (iterable as AsyncIterable<unknown>)[Symbol.asyncIterator] === "function") {
+    return iterable as AsyncIterable<unknown>;
+  }
+
   throw new TypeError("iterable is not async iterable");
+}
+
+async function drainReadableToAsyncIterable(readable: Readable): Promise<AsyncIterable<unknown>> {
+  const chunks: Buffer[] = [];
+  let chunk: Buffer | string | null;
+  while ((chunk = readable.read()) !== null) {
+    chunks.push(toBuffer(chunk));
+  }
+
+  if (!chunks.length && !readable.readableEnded) {
+    await new Promise<void>((resolve, reject) => {
+      readable.on("data", (data) => {
+        chunks.push(toBuffer(data));
+      });
+      readable.on("error", reject);
+      readable.on("end", () => resolve());
+    });
+  }
+
+  const bytes = Buffer.concat(chunks);
+  return (async function* singleChunk() {
+    yield bytes;
+  })();
 }
 
 function isReadable(value: unknown): value is Readable {

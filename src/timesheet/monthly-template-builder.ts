@@ -1,3 +1,4 @@
+import "./exceljs-bootstrap.js";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import ExcelJS from "exceljs";
@@ -20,7 +21,7 @@ import {
   TimesheetTemplateMapping
 } from "./template-mapper.js";
 import { repairTimesheetStylesFromTemplate } from "./xlsx-style-repair.js";
-import { readWorkbookFromPath } from "./workbook-io.js";
+import { readWorkbookFromPath, writeWorkbookToPath } from "./workbook-io.js";
 
 export interface BuildMonthlyTemplateOptions {
   masterPath: string;
@@ -230,7 +231,7 @@ export async function buildMonthlyTemplate(options: BuildMonthlyTemplateOptions)
     `.${path.basename(options.outputPath)}.${process.pid}.${Date.now()}.tmp`
   );
 
-  await workbook.xlsx.writeFile(tempPath);
+  await writeWorkbookToPath(workbook, tempPath);
   const lastDataRow = mapping.firstDataRow + dates.length - 1;
   repairTimesheetStylesFromTemplate(options.masterPath, tempPath, {
     holidayReferenceRow,

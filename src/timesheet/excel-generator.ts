@@ -1,3 +1,4 @@
+import "./exceljs-bootstrap.js";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import ExcelJS from "exceljs";
@@ -15,7 +16,7 @@ import { applyDetailRowHeight } from "./row-height.js";
 import { applyTimesheetMetadataFonts } from "./timesheet-cell-style.js";
 import { cellText, detectTimesheetMapping } from "./template-mapper.js";
 import { repairTimesheetStylesFromTemplate } from "./xlsx-style-repair.js";
-import { readWorkbookFromPath } from "./workbook-io.js";
+import { readWorkbookFromPath, writeWorkbookToPath } from "./workbook-io.js";
 
 function isFormulaCell(cell: ExcelJS.Cell): boolean {
   const value = cell.value;
@@ -186,7 +187,7 @@ export async function generateTimesheet(
     `.${path.basename(options.outputPath)}.${process.pid}.${Date.now()}.tmp`
   );
   try {
-    await workbook.xlsx.writeFile(tempPath);
+    await writeWorkbookToPath(workbook, tempPath);
     repairTimesheetStylesFromTemplate(options.templatePath, tempPath, {
       holidayReferenceRow,
       prestyledHolidayRows,
