@@ -2298,6 +2298,20 @@ textarea {
   background: #ffff00;
 }
 
+.excel-preview .preview-muted-row td {
+  background: #e2e8f0 !important;
+  color: #64748b;
+}
+
+.excel-preview .preview-muted-row .col-detail {
+  color: #475569;
+}
+
+.excel-preview .preview-missing-row .cell-missing {
+  background: #ffff00 !important;
+  color: #334155;
+}
+
 .excel-preview .preview-missing-row .col-task,
 .excel-preview .preview-missing-row .col-role,
 .excel-preview .preview-missing-row .col-date,

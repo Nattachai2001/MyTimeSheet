@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { AppConfig } from "../src/config/env.js";
-import { buildTimesheetPreviewRows } from "../src/timesheet/preview-rows.js";
+import {
+  buildMonthPreviewRows,
+  buildTimesheetPreviewRows
+} from "../src/timesheet/preview-rows.js";
+import { WorkCalendar } from "../src/timesheet/date-resolver.js";
 
 const config: AppConfig = {
   slack: {
@@ -16,7 +20,7 @@ const config: AppConfig = {
     defaultTimeOut: "18:00",
     includedLunchTime: "YES",
     workingDays: [1, 2, 3, 4, 5],
-    holidayDates: [],
+    holidayDates: ["2026-07-10"],
     extraHolidayDates: [],
     disabledThaiHolidaySlugs: [],
     excludedDates: []
@@ -42,6 +46,12 @@ const config: AppConfig = {
   }
 };
 
+const calendar: WorkCalendar = {
+  workingDays: config.work.workingDays,
+  holidayDates: config.work.holidayDates,
+  excludedDates: config.work.excludedDates
+};
+
 describe("buildTimesheetPreviewRows", () => {
   it("mirrors workbook values for work and leave days", () => {
     const rows = buildTimesheetPreviewRows(
@@ -57,14 +67,59 @@ describe("buildTimesheetPreviewRows", () => {
       taskCode: "W1 - Test Execution",
       timeIn: "09:00",
       hours: "8.00",
-      dateDisplay: "30/6/2026"
+      dateDisplay: "30/6/2026",
+      rowKind: "work",
+      isMuted: false
     });
-    expect(rows[1].isMissing).toBe(true);
+    expect(rows[1]).toMatchObject({ isMissing: true, rowKind: "missing", isMuted: false });
     expect(rows[2]).toMatchObject({
       taskCode: "L2 - Sick Leave",
       timeIn: "",
       hours: "",
-      isLeave: true
+      isLeave: true,
+      rowKind: "leave",
+      isMuted: true
     });
+  });
+});
+
+describe("buildMonthPreviewRows", () => {
+  it("includes muted rows for holidays, weekends, and leave days", () => {
+    const rows = buildMonthPreviewRows(
+      "2026-07",
+      [
+        { date: "2026-07-09", detail: "[Meeting]\nQA planning", source: "same-report-today" },
+        { date: "2026-07-13", detail: "Annual leave", source: "annual-leave" }
+      ],
+      calendar,
+      config
+    );
+
+    const holiday = rows.find((row) => row.date === "2026-07-10");
+    const weekend = rows.find((row) => row.date === "2026-07-11");
+    const leave = rows.find((row) => row.date === "2026-07-13");
+    const work = rows.find((row) => row.date === "2026-07-09");
+
+    expect(holiday).toMatchObject({
+      rowKind: "holiday",
+      taskCode: "H1 - Holiday",
+      detail: "",
+      isMuted: true
+    });
+    expect(weekend).toMatchObject({
+      rowKind: "weekend",
+      detail: "",
+      isMuted: true
+    });
+    expect(leave).toMatchObject({
+      rowKind: "leave",
+      isLeave: true,
+      isMuted: true
+    });
+    expect(work).toMatchObject({
+      rowKind: "work",
+      isMuted: false
+    });
+    expect(rows).toHaveLength(31);
   });
 });

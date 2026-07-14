@@ -1159,6 +1159,7 @@ function renderPreviewTable(preview) {
 
   rows.forEach((row, index) => {
     const tr = document.createElement("tr");
+    if (row.isMuted) tr.classList.add("preview-muted-row");
     if (row.isMissing) tr.classList.add("preview-missing-row");
 
     const taskCode = row.taskCode ?? "";

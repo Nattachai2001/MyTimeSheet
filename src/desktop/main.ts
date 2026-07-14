@@ -20,7 +20,7 @@ import { generateTimesheet } from "../timesheet/excel-generator.js";
 import { resolveTemplatePathForMonth } from "../timesheet/template-resolver.js";
 import { resolveTimesheetOutputPath } from "../timesheet/output-path.js";
 import { exportWorkbookToPdf } from "../timesheet/pdf-exporter.js";
-import { buildTimesheetPreviewRows } from "../timesheet/preview-rows.js";
+import { buildMonthPreviewRows } from "../timesheet/preview-rows.js";
 import { validateWorkbook } from "../timesheet/timesheet-validator.js";
 import { SupDailyRecordSchema } from "../storage/schemas.js";
 import {
@@ -640,7 +640,7 @@ ipcMain.handle("timesheet:preview", async (_event, month: string) => {
     month,
     templatePath,
     details,
-    rows: buildTimesheetPreviewRows(details, config),
+    rows: buildMonthPreviewRows(month, details, calendar, config),
     filledDates,
     missingDates,
     expectedWorkingDays: details.length
