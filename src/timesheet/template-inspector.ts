@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 
 import { cellText, detectOvertimeMapping, detectTimesheetMapping } from "./template-mapper.js";
+import { readWorkbookFromPath } from "./workbook-io.js";
 
 export interface TemplateInspection {
   sheets: string[];
@@ -13,7 +14,7 @@ export interface TemplateInspection {
 
 export async function inspectTemplate(templatePath: string): Promise<TemplateInspection> {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(templatePath);
+  await readWorkbookFromPath(workbook, templatePath);
 
   const formulaCells: TemplateInspection["formulaCells"] = [];
   const usedRanges: TemplateInspection["usedRanges"] = [];

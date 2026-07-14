@@ -15,6 +15,7 @@ import { applyDetailRowHeight } from "./row-height.js";
 import { applyTimesheetMetadataFonts } from "./timesheet-cell-style.js";
 import { cellText, detectTimesheetMapping } from "./template-mapper.js";
 import { repairTimesheetStylesFromTemplate } from "./xlsx-style-repair.js";
+import { readWorkbookFromPath } from "./workbook-io.js";
 
 function isFormulaCell(cell: ExcelJS.Cell): boolean {
   const value = cell.value;
@@ -58,11 +59,7 @@ export async function generateTimesheet(
   options: GenerateTimesheetOptions
 ): Promise<GenerateTimesheetResult> {
   const workbook = new ExcelJS.Workbook();
-  try {
-    await workbook.xlsx.readFile(options.templatePath);
-  } catch (error) {
-    throw toFileLockError(error, options.templatePath);
-  }
+  await readWorkbookFromPath(workbook, options.templatePath);
   const mapping = detectTimesheetMapping(workbook);
   const worksheet = workbook.getWorksheet(mapping.sheetName);
   if (!worksheet) throw new Error(`Worksheet not found: ${mapping.sheetName}`);

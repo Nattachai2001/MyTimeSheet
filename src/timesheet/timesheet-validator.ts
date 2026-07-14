@@ -4,6 +4,7 @@ import { AppConfig } from "../config/env.js";
 import { monthDates, parseExcelDisplayDate } from "../shared/date.js";
 import { isWorkingDate, WorkCalendar } from "./date-resolver.js";
 import { detectTimesheetMapping } from "./template-mapper.js";
+import { readWorkbookFromPath } from "./workbook-io.js";
 
 function isLeaveTaskCode(taskCode: string, config: AppConfig): boolean {
   const normalized = taskCode.trim().toLowerCase();
@@ -26,7 +27,7 @@ export async function validateWorkbook(
   config: AppConfig
 ): Promise<ValidationSummary> {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(workbookPath);
+  await readWorkbookFromPath(workbook, workbookPath);
   const mapping = detectTimesheetMapping(workbook);
   const worksheet = workbook.getWorksheet(mapping.sheetName);
   if (!worksheet) throw new Error(`Worksheet not found: ${mapping.sheetName}`);

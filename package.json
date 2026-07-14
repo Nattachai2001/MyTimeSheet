@@ -1,6 +1,6 @@
 {
   "name": "sup-timesheet-automation",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "timesheetUpdate": {
     "provider": "github",
     "owner": "Nattachai2001",

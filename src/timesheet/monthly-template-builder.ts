@@ -20,6 +20,7 @@ import {
   TimesheetTemplateMapping
 } from "./template-mapper.js";
 import { repairTimesheetStylesFromTemplate } from "./xlsx-style-repair.js";
+import { readWorkbookFromPath } from "./workbook-io.js";
 
 export interface BuildMonthlyTemplateOptions {
   masterPath: string;
@@ -167,7 +168,7 @@ function fillWorkTemplateRow(
 
 export async function buildMonthlyTemplate(options: BuildMonthlyTemplateOptions): Promise<void> {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(options.masterPath);
+  await readWorkbookFromPath(workbook, options.masterPath);
 
   const mapping = detectTimesheetMapping(workbook);
   const worksheet = workbook.getWorksheet(mapping.sheetName);
