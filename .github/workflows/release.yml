@@ -31,7 +31,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Windows installer
-        run: pnpm desktop:dist
+        run: pnpm desktop:dist -- --publish never
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
