@@ -5,13 +5,38 @@ import ExcelJS from "exceljs";
 import { AppConfig } from "../config/env.js";
 import { toFileLockError } from "../shared/file-lock-error.js";
 import { replaceFileAtomically } from "../shared/safe-file-replace.js";
-import { dateToDisplay, parseExcelDisplayDate } from "../shared/date.js";
+import { dateToDisplay, monthDates, parseExcelDisplayDate } from "../shared/date.js";
 import { ResolvedWorkDetail } from "../storage/schemas.js";
+import { isWorkingDate } from "./date-resolver.js";
 import { fillOvertimeSheet } from "./overtime-generator.js";
 import { taskCodeForDetail } from "./leave-resolver.js";
-import { OvertimeEntry, OvertimeFillResult } from "./overtime-types.js";
+import { OvertimeEntry, OvertimeEntryInput, OvertimeFillResult } from "./overtime-types.js";
 import { applyDetailRowHeight } from "./row-height.js";
-import { detectTimesheetMapping } from "./template-mapper.js";
+import { applyTimesheetMetadataFonts } from "./timesheet-cell-style.js";
+import { cellText, detectTimesheetMapping } from "./template-mapper.js";
+import { repairTimesheetStylesFromTemplate } from "./xlsx-style-repair.js";
+
+function isFormulaCell(cell: ExcelJS.Cell): boolean {
+  const value = cell.value;
+  return Boolean(value && typeof value === "object" && "formula" in value);
+}
+
+function setCellUnlessFormula(cell: ExcelJS.Cell, value: ExcelJS.CellValue): void {
+  if (isFormulaCell(cell)) return;
+  cell.value = value;
+}
+
+function clearCellValue(cell: ExcelJS.Cell): void {
+  if (cell.value == null || cell.value === "") return;
+  cell.value = null;
+}
+
+function setTextIfDifferent(cell: ExcelJS.Cell, value: string): void {
+  if (isFormulaCell(cell)) return;
+  const current = cellText(cell).trim();
+  if (current === value.trim()) return;
+  cell.value = value;
+}
 
 export interface GenerateTimesheetOptions {
   templatePath: string;
@@ -19,7 +44,7 @@ export interface GenerateTimesheetOptions {
   month: string;
   details: ResolvedWorkDetail[];
   config: AppConfig;
-  overtimeEntries?: OvertimeEntry[];
+  overtimeEntries?: OvertimeEntryInput[];
 }
 
 export interface GenerateTimesheetResult {
@@ -45,6 +70,19 @@ export async function generateTimesheet(
   updateMetadata(worksheet, mapping.metadataCells, options);
 
   const rowByDate = mapRowsByDate(worksheet, mapping.columns.date, mapping.firstDataRow);
+  const prestyledHolidayRows = snapshotPrestyledHolidayRows(
+    worksheet,
+    mapping,
+    rowByDate,
+    options.month,
+    options.config.timesheet.holidayTaskCode
+  );
+  const holidayReferenceRow = findHolidayReferenceRow(
+    worksheet,
+    mapping,
+    options.config.timesheet.holidayTaskCode
+  );
+  const convertedHolidayRows = new Set<number>();
   const filledDates: string[] = [];
   const missingDates: string[] = [];
 
@@ -57,6 +95,7 @@ export async function generateTimesheet(
 
     const row = worksheet.getRow(rowNumber);
     const isLeaveDay = detail.source === "annual-leave" || detail.source === "sick-leave";
+    const isFullDayLeave = isLeaveDay && !(detail.halfDay && detail.timeIn && detail.timeOut);
     row.getCell(mapping.columns.taskCode).value = taskCodeForDetail(options.config, detail.source);
     row.getCell(mapping.columns.role).value = options.config.timesheet.role;
     row.getCell(mapping.columns.date).value = dateToDisplay(detail.date);
@@ -70,10 +109,10 @@ export async function generateTimesheet(
         hoursCell.value = detail.hours ?? null;
         if (detail.hours != null) hoursCell.numFmt = "0.00";
       } else {
-        row.getCell(mapping.columns.timeIn).value = null;
-        row.getCell(mapping.columns.timeOut).value = null;
-        row.getCell(mapping.columns.includedLunch).value = null;
-        row.getCell(mapping.columns.hours).value = null;
+        clearCellValue(row.getCell(mapping.columns.timeIn));
+        clearCellValue(row.getCell(mapping.columns.timeOut));
+        clearCellValue(row.getCell(mapping.columns.includedLunch));
+        clearCellValue(row.getCell(mapping.columns.hours));
       }
     } else {
       row.getCell(mapping.columns.timeIn).value = options.config.work.defaultTimeIn;
@@ -81,7 +120,7 @@ export async function generateTimesheet(
       row.getCell(mapping.columns.includedLunch).value = options.config.work.includedLunchTime;
 
       const hoursCell = row.getCell(mapping.columns.hours);
-      if (!hoursCell.value || typeof hoursCell.value !== "object") {
+      if (!isFormulaCell(hoursCell)) {
         hoursCell.value = 8;
         hoursCell.numFmt = "0.00";
       }
@@ -89,18 +128,52 @@ export async function generateTimesheet(
 
     const detailCell = row.getCell(mapping.columns.detail);
     detailCell.value = detail.detail;
-    detailCell.alignment = { ...(detailCell.alignment ?? {}), wrapText: true, vertical: "top" };
     applyDetailRowHeight(worksheet, row, mapping.columns.detail, detail.detail);
     if (detail.source === "missing") {
-      detailCell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFFFFF00" }
-      };
       missingDates.push(detail.date);
     } else {
       filledDates.push(detail.date);
     }
+    if (isFullDayLeave) {
+      convertedHolidayRows.add(rowNumber);
+    }
+    row.commit();
+  }
+
+  const calendar = {
+    workingDays: options.config.work.workingDays,
+    holidayDates: options.config.work.holidayDates,
+    excludedDates: options.config.work.excludedDates
+  };
+  const filledDetailDates = new Set(options.details.map((detail) => detail.date));
+
+  for (const date of monthDates(options.month)) {
+    if (filledDetailDates.has(date) || isWorkingDate(date, calendar)) continue;
+
+    const rowNumber = rowByDate.get(date);
+    if (!rowNumber) continue;
+
+    const row = worksheet.getRow(rowNumber);
+    if (isPrestyledHolidayRow(row, mapping, options.config.timesheet.holidayTaskCode)) {
+      const dateCell = row.getCell(mapping.columns.date);
+      if (parseExcelDisplayDate(dateCell.value) === date) {
+        continue;
+      }
+      const displayDate = dateToDisplay(date);
+      dateCell.value = displayDate;
+      row.commit();
+      continue;
+    }
+
+    setTextIfDifferent(row.getCell(mapping.columns.taskCode), options.config.timesheet.holidayTaskCode);
+    setTextIfDifferent(row.getCell(mapping.columns.role), options.config.timesheet.role);
+    row.getCell(mapping.columns.date).value = dateToDisplay(date);
+    clearCellValue(row.getCell(mapping.columns.timeIn));
+    clearCellValue(row.getCell(mapping.columns.timeOut));
+    clearCellValue(row.getCell(mapping.columns.includedLunch));
+    clearCellValue(row.getCell(mapping.columns.hours));
+    clearCellValue(row.getCell(mapping.columns.detail));
+    convertedHolidayRows.add(rowNumber);
     row.commit();
   }
 
@@ -117,12 +190,68 @@ export async function generateTimesheet(
   );
   try {
     await workbook.xlsx.writeFile(tempPath);
+    repairTimesheetStylesFromTemplate(options.templatePath, tempPath, {
+      holidayReferenceRow,
+      prestyledHolidayRows,
+      convertedHolidayRows,
+      firstDataRow: mapping.firstDataRow,
+      lastDataRow: Math.max(...rowByDate.values()),
+      detailColumnNumber: mapping.columns.detail
+    });
     await replaceFileAtomically(tempPath, options.outputPath);
   } catch (error) {
     throw toFileLockError(error, options.outputPath);
   }
 
   return { outputPath: options.outputPath, filledDates, missingDates, overtime };
+}
+
+function isPrestyledHolidayRow(
+  row: ExcelJS.Row,
+  mapping: ReturnType<typeof detectTimesheetMapping>,
+  holidayTaskCode: string
+): boolean {
+  return (
+    cellText(row.getCell(mapping.columns.taskCode)).trim().toLowerCase() ===
+    holidayTaskCode.trim().toLowerCase()
+  );
+}
+
+function snapshotPrestyledHolidayRows(
+  worksheet: ExcelJS.Worksheet,
+  mapping: ReturnType<typeof detectTimesheetMapping>,
+  rowByDate: Map<string, number>,
+  month: string,
+  holidayTaskCode: string
+): Set<number> {
+  const rows = new Set<number>();
+  for (const date of monthDates(month)) {
+    const rowNumber = rowByDate.get(date);
+    if (!rowNumber) continue;
+    const row = worksheet.getRow(rowNumber);
+    if (isPrestyledHolidayRow(row, mapping, holidayTaskCode)) {
+      rows.add(rowNumber);
+    }
+  }
+  return rows;
+}
+
+function findHolidayReferenceRow(
+  worksheet: ExcelJS.Worksheet,
+  mapping: ReturnType<typeof detectTimesheetMapping>,
+  holidayTaskCode: string
+): number {
+  const normalizedHoliday = holidayTaskCode.trim().toLowerCase();
+  for (let rowNumber = mapping.firstDataRow; rowNumber <= worksheet.rowCount; rowNumber += 1) {
+    const taskText = cellText(worksheet.getRow(rowNumber).getCell(mapping.columns.taskCode))
+      .trim()
+      .toLowerCase();
+    if (!taskText) continue;
+    if (taskText === normalizedHoliday || taskText.includes("holiday") || taskText.startsWith("h1")) {
+      return rowNumber;
+    }
+  }
+  return mapping.firstDataRow + 3;
 }
 
 function mapRowsByDate(
@@ -149,4 +278,5 @@ function updateMetadata(
   if (metadataCells.period) worksheet.getCell(metadataCells.period).value = period;
   if (metadataCells.staffName) worksheet.getCell(metadataCells.staffName).value = options.config.timesheet.staffName;
   if (metadataCells.site) worksheet.getCell(metadataCells.site).value = options.config.timesheet.site;
+  applyTimesheetMetadataFonts(worksheet, metadataCells);
 }

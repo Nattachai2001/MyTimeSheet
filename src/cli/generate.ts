@@ -13,20 +13,28 @@ import { resolveMonthlyWorkDetails } from "../timesheet/date-resolver.js";
 import { generateTimesheet } from "../timesheet/excel-generator.js";
 import { resolveTimesheetOutputPath } from "../timesheet/output-path.js";
 import { exportWorkbookToPdf } from "../timesheet/pdf-exporter.js";
-import { resolveTemplatePathForMonth } from "../timesheet/template-resolver.js";
+import { ensureTemplateForMonth } from "../timesheet/ensure-template.js";
 import { yearsForMonth } from "../holidays/thai-public-holidays.js";
 import { resolveWorkHolidayDates } from "../holidays/resolve-work-holidays.js";
 
 const args = parseArgs();
 const config = await loadConfig();
 const month = requireStringArg(args, "month", previousMonthBangkok());
-const templatePath = resolveTemplatePathForMonth({
-  month,
-  templateFolder: typeof args.templateFolder === "string" ? path.resolve(args.templateFolder) : undefined,
-  templatePath: typeof args.template === "string" ? path.resolve(args.template) : undefined,
-  rootDirectory: config.storage.rootDirectory,
-  configuredFilename: config.timesheet.templateFilename
-});
+const templateFolder =
+  typeof args.templateFolder === "string"
+    ? path.resolve(args.templateFolder)
+    : path.join(config.storage.rootDirectory, "templates");
+const templatePath =
+  typeof args.template === "string"
+    ? path.resolve(args.template)
+    : (
+        await ensureTemplateForMonth({
+          month,
+          config,
+          templateFolder,
+          configuredFilename: config.timesheet.templateFilename
+        })
+      ).templatePath;
 const outputPath =
   typeof args.output === "string"
     ? path.resolve(args.output)

@@ -85,6 +85,41 @@ describe("generateTimesheet", () => {
     expect(row?.getCell(mapping.columns.detail).text).toContain("morning");
   });
 
+  it.skipIf(!existsSync(templatePath))("clears hours formulas on converted weekday holidays", async () => {
+    await rm(path.dirname(outputPath), { recursive: true, force: true });
+    await mkdir(path.dirname(outputPath), { recursive: true });
+
+    const holidayConfig: AppConfig = {
+      ...testConfig,
+      work: {
+        ...testConfig.work,
+        holidayDates: ["2026-07-16"]
+      }
+    };
+
+    await generateTimesheet({
+      templatePath,
+      outputPath,
+      month: "2026-07",
+      details: [],
+      config: holidayConfig
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(outputPath);
+    const mapping = detectTimesheetMapping(workbook);
+    const worksheet = workbook.getWorksheet(mapping.sheetName);
+    const row = worksheet!
+      .getRows(mapping.firstDataRow, worksheet!.rowCount - mapping.firstDataRow + 1)!
+      .find((candidate) => candidate.getCell(mapping.columns.date).text.includes("16/7/2026"));
+
+    expect(row?.getCell(mapping.columns.taskCode).text).toContain("Holiday");
+    expect(row?.getCell(mapping.columns.timeIn).text).toBe("");
+    expect(row?.getCell(mapping.columns.timeOut).text).toBe("");
+    expect(row?.getCell(mapping.columns.hours).text).toBe("");
+    expect(row?.getCell(mapping.columns.hours).formula).toBeFalsy();
+  });
+
   it.skipIf(!existsSync(templatePath))("leaves time cells empty for full leave days", async () => {
     await rm(path.dirname(outputPath), { recursive: true, force: true });
     await mkdir(path.dirname(outputPath), { recursive: true });

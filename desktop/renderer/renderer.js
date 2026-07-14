@@ -1,12 +1,14 @@
 const api = window.timesheetApp;
 
 if (!api) {
-  const status = document.getElementById("statusText");
-  if (status) {
-    const label = status.querySelector(".status-label") ?? status;
-    label.textContent = "Desktop bridge failed to load. Please reinstall the latest build.";
-    status.className = "status-pill error";
-    status.dataset.state = "error";
+  const bridgeError = "Desktop bridge failed to load. Please reinstall the latest build.";
+  const stack = document.getElementById("toastStack");
+  if (stack) {
+    const toast = document.createElement("div");
+    toast.className = "toast toast-error";
+    toast.setAttribute("role", "alert");
+    toast.textContent = bridgeError;
+    stack.appendChild(toast);
   }
   throw new Error("Desktop bridge failed to load: window.timesheetApp is missing");
 }
@@ -26,11 +28,11 @@ const state = {
   thaiHolidayCache: undefined,
   drivePickerResolve: null,
   updateDismissed: false,
-  pendingUpdate: undefined
+  pendingUpdate: undefined,
+  editingOvertimeId: null
 };
 
 const ids = [
-  "statusText",
   "viewTitle",
   "settingsHint",
   "entryDate",
@@ -49,11 +51,16 @@ const ids = [
   "clearEntryButton",
   "openStorageButton",
   "monthInput",
-  "previousMonthButton",
   "refreshSummaryButton",
   "previewButton",
   "validateButton",
   "generateButton",
+  "generateProgress",
+  "generateProgressBody",
+  "generateProgressSuccess",
+  "generateProgressLabel",
+  "generateProgressPercent",
+  "generateProgressBar",
   "openOutputButton",
   "openPdfButton",
   "generateResult",
@@ -84,11 +91,13 @@ const ids = [
   "overtimeLunchInput",
   "overtimeDetailInput",
   "saveOvertimeButton",
+  "newOvertimeSlotButton",
   "clearOvertimeButton",
   "overtimeEmptyState",
   "overtimeEntryList",
   "staffNameInput",
   "siteInput",
+  "roleInput",
   "reminderTimeInput",
   "storageRootInput",
   "templatePathInput",
@@ -221,20 +230,7 @@ el.dismissUpdateButton?.addEventListener("click", () => {
   hideUpdateBanner();
 });
 
-el.previousMonthButton.addEventListener("click", async () => {
-  el.monthInput.value = await api.previousMonth();
-  await refreshMonthSummary();
-  await refreshOvertimePanel({ resetToggle: true });
-  await refreshTemplatePath();
-  await loadMonthPreview();
-});
-
-el.monthInput.addEventListener("change", async () => {
-  await refreshMonthSummary();
-  await refreshOvertimePanel({ resetToggle: true });
-  await refreshTemplatePath();
-  await loadMonthPreview();
-});
+el.monthInput.addEventListener("change", handleTimesheetMonthChange);
 el.refreshSummaryButton.addEventListener("click", async () => {
   await refreshMonthSummary();
   await refreshTemplatePath();
@@ -259,31 +255,37 @@ el.validateButton.addEventListener("click", async () => {
 });
 
 el.generateButton.addEventListener("click", async () => {
-  await runWithStatus("Generating timesheet...", async () => {
-    const result = await api.generateTimesheet(el.monthInput.value);
-    state.lastOutputPath = result.outputPath;
-    state.lastPdfPath = result.pdfPath;
+  const result = await runGenerateWithProgress(async () => {
+    const generated = await api.generateTimesheet(el.monthInput.value);
+    state.lastOutputPath = generated.outputPath;
+    state.lastPdfPath = generated.pdfPath;
     el.openOutputButton.disabled = false;
-    el.openPdfButton.disabled = !result.pdfPath || Boolean(result.pdfError);
-    updateTemplateDisplay(result.templatePath, true);
-    updateExportActions();
+    el.openPdfButton.disabled = !generated.pdfPath || Boolean(generated.pdfError);
+    updateTemplateDisplay(generated.templatePath, true, "ready");
     updateOutputNamePreview();
-    renderValidationPanel({
-      exists: true,
-      outputPath: result.outputPath,
-      pdfPath: result.pdfPath,
-      pdfError: result.pdfError,
-      overtime: result.overtime,
-      ...result.validation
-    });
     el.generateResult.classList.add("hidden");
-    await loadMonthPreview();
-    if (result.pdfError) {
-      setStatus(`Excel generated, but PDF export failed: ${result.pdfError}`, "error");
-      return;
-    }
-    setStatus(result.pdfPath ? "Timesheet and PDF generated" : "Timesheet generated", "success");
-    showToast("Timesheet generated", "success");
+    return generated;
+  });
+
+  if (!result) return;
+
+  showOutputActionsAnimated();
+  renderValidationPanel({
+    exists: true,
+    outputPath: result.outputPath,
+    pdfPath: result.pdfPath,
+    pdfError: result.pdfError,
+    overtime: result.overtime,
+    ...result.validation
+  });
+  await loadMonthPreview();
+
+  if (result.pdfError) {
+    setStatus(`Excel generated, but PDF export failed: ${result.pdfError}`, "error");
+    return;
+  }
+  setStatus(result.pdfPath ? "Timesheet and PDF generated" : "Timesheet generated", "success", {
+    silentToast: true
   });
 });
 
@@ -325,8 +327,9 @@ el.saveLeaveButton?.addEventListener("click", saveLeaveFromUi);
 el.clearLeaveButton?.addEventListener("click", clearLeaveFromUi);
 el.leaveDateInput?.addEventListener("change", loadLeaveForDate);
 el.hasOvertimeCheckbox?.addEventListener("change", updateOvertimeFormVisibility);
-el.overtimeDateInput?.addEventListener("change", loadOvertimeForDate);
+el.overtimeDateInput?.addEventListener("change", () => beginOvertimeNewSlot());
 el.saveOvertimeButton?.addEventListener("click", saveOvertimeFromUi);
+el.newOvertimeSlotButton?.addEventListener("click", () => beginOvertimeNewSlot());
 el.clearOvertimeButton?.addEventListener("click", clearOvertimeFromUi);
 el.leaveTypeInput?.addEventListener("change", handleLeaveTypeChange);
 el.leaveHalfDayInput?.addEventListener("change", updateLeaveHalfDayVisibility);
@@ -469,7 +472,7 @@ async function init() {
     state.settingsAutosaveReady = true;
     updateSettingsAutosaveState("saved");
     updateExportActions();
-    setStatus("Ready", "success");
+    setStatus("Ready", "success", { silentToast: true });
     updateNavIndicator();
     requestAnimationFrame(updateNavIndicator);
     window.ModernPickers?.refreshAll();
@@ -493,7 +496,8 @@ function isAppSetupComplete(settings = state.settings) {
 function profileFromForm() {
   return {
     staffName: el.staffNameInput.value.trim(),
-    site: el.siteInput.value.trim()
+    site: el.siteInput.value.trim(),
+    role: el.roleInput.value.trim() || DEFAULT_TIMESHEET_ROLE
   };
 }
 
@@ -563,7 +567,7 @@ async function enforceFirstRunSetup() {
           el.staffNameInput?.focus();
           setStatus("Finish Staff name and Site in Settings", "idle");
         } else {
-          setStatus("Google Drive ready", "success");
+          setStatus("Google Drive ready", "success", { silentToast: true });
         }
         return;
       }
@@ -634,6 +638,7 @@ function showView(viewId) {
   );
 
   animateTitle(next.dataset.title);
+  requestAnimationFrame(syncToastAnchor);
 
   if (viewId === "settingsView") {
     refreshCloudStorageStatus();
@@ -795,9 +800,23 @@ function countItems(value) {
     .filter((line) => line && !/^added by\b/i.test(line)).length;
 }
 
+function setRoleSelectValue(role) {
+  const value = role?.trim() || DEFAULT_TIMESHEET_ROLE;
+  const select = el.roleInput;
+  const hasOption = [...select.options].some((option) => option.value === value);
+  if (!hasOption) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.appendChild(option);
+  }
+  select.value = value;
+}
+
 function fillSettingsForm(settings) {
   el.staffNameInput.value = settings.staffName;
   el.siteInput.value = settings.site;
+  setRoleSelectValue(settings.role);
   el.reminderTimeInput.value = settings.reminderTime;
   el.storageRootInput.value = settings.storageRoot;
   el.templatePathInput.value = settings.templateFolder ?? settings.templatePath;
@@ -831,6 +850,7 @@ function readSettingsForm() {
     displayName,
     staffName,
     site: profile.site,
+    role: profile.role,
     reminderTime: el.reminderTimeInput.value || "12:00",
     storageRoot,
     templateFolder: el.templatePathInput.value,
@@ -848,6 +868,7 @@ function normalizedSettingsForCompare(settings) {
   return JSON.stringify({
     staffName: settings.staffName,
     site: settings.site,
+    role: settings.role,
     reminderTime: settings.reminderTime,
     storageRoot: settings.storageRoot,
     templateFolder: settings.templateFolder,
@@ -961,15 +982,15 @@ async function persistSettings({ silent = false } = {}) {
     await loadMonthPreview();
 
     if (!silent && previousStorageRoot === state.settings.storageRoot) {
-      setStatus("Settings saved", "success");
+      setStatus("Settings saved", "success", { silentToast: true });
     } else if (previousStorageRoot !== state.settings.storageRoot) {
-      setStatus(`Using ${state.settings.templateFolder}`, "success");
+      setStatus(`Using ${state.settings.templateFolder}`, "success", { silentToast: true });
     }
     return true;
   } catch (error) {
     const text = formatIpcError(error);
     updateSettingsAutosaveState("error");
-    setStatus(text, "error");
+    setStatus(text, "error", { silentToast: true });
     showToast(text, "error", 6500);
     return false;
   } finally {
@@ -981,12 +1002,12 @@ async function persistSettings({ silent = false } = {}) {
   }
 }
 
-function setStatus(message, type = "") {
-  const label = el.statusText.querySelector(".status-label") ?? el.statusText;
-  label.textContent = message;
-  el.statusText.className = `status-pill ${type}`.trim();
-  el.statusText.dataset.state = type || "idle";
-  replayAnimation(el.statusText, "bump");
+function setStatus(message, type = "", options = {}) {
+  if (options.silentToast) return;
+  if (type === "error" || type === "success") {
+    const duration = options.toastDuration ?? (type === "error" ? 6500 : 3200);
+    showToast(message, type, duration);
+  }
 }
 
 function formatIpcError(error) {
@@ -1001,10 +1022,133 @@ async function runWithStatus(message, action) {
     await action();
   } catch (error) {
     const text = formatIpcError(error);
-    setStatus(text, "error");
+    setStatus(text, "error", { silentToast: true });
     showToast(text, "error", 6500);
   } finally {
     document.body.classList.remove("is-busy");
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function easeOutCubic(value) {
+  return 1 - (1 - value) ** 3;
+}
+
+function animateGenerateProgress(from, to, durationMs, label) {
+  return new Promise((resolve) => {
+    const start = performance.now();
+    const step = (now) => {
+      const ratio = Math.min(1, (now - start) / durationMs);
+      const eased = easeOutCubic(ratio);
+      const value = from + (to - from) * eased;
+      setGenerateProgress(value, label);
+      if (ratio < 1) {
+        requestAnimationFrame(step);
+      } else {
+        resolve();
+      }
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+function setGenerateProgress(percent, label) {
+  const clamped = Math.max(0, Math.min(100, percent));
+  if (el.generateProgressLabel && label) {
+    el.generateProgressLabel.textContent = label;
+  }
+  if (el.generateProgressPercent) {
+    el.generateProgressPercent.textContent = `${Math.round(clamped)}%`;
+  }
+  if (el.generateProgressBar) {
+    el.generateProgressBar.style.width = `${clamped}%`;
+  }
+}
+
+function resetGenerateProgressUi() {
+  setGenerateProgress(0, "Generating timesheet...");
+  el.generateProgressBody?.classList.remove("hidden", "is-hiding");
+  el.generateProgressSuccess?.classList.add("hidden");
+  el.generateProgress?.classList.remove("is-success");
+}
+
+function showGenerateProgress(visible) {
+  el.generateProgress?.classList.toggle("hidden", !visible);
+  el.generateProgress?.classList.toggle("is-active", visible);
+  el.exportStep?.classList.toggle("is-generating", visible);
+  if (el.generateButton) {
+    el.generateButton.disabled = visible;
+  }
+  if (!visible) {
+    resetGenerateProgressUi();
+  }
+}
+
+async function showGenerateSuccessMessage() {
+  const body = el.generateProgressBody;
+  const success = el.generateProgressSuccess;
+  if (!body || !success) return;
+
+  body.classList.add("is-hiding");
+  await sleep(320);
+  body.classList.add("hidden");
+  body.classList.remove("is-hiding");
+
+  success.classList.remove("hidden");
+  el.generateProgress?.classList.add("is-success");
+  el.generateProgress?.classList.remove("is-active");
+
+  await sleep(2000);
+
+  success.classList.add("hidden");
+  el.generateProgress?.classList.remove("is-success");
+  resetGenerateProgressUi();
+}
+
+async function runGenerateWithProgress(action) {
+  document.body.classList.add("is-busy", "is-generating");
+  resetGenerateProgressUi();
+  showGenerateProgress(true);
+  hideOutputActionsAnimated();
+
+  let workError;
+  let workResult;
+  const workPromise = Promise.resolve()
+    .then(action)
+    .then((result) => {
+      workResult = result;
+    })
+    .catch((error) => {
+      workError = error;
+    });
+
+  try {
+    setGenerateProgress(0, "Preparing...");
+    await animateGenerateProgress(0, 10, 550, "Preparing...");
+    await sleep(2000);
+
+    await animateGenerateProgress(10, 75, 750, "Generating timesheet...");
+    await sleep(2000);
+
+    await animateGenerateProgress(75, 95, 550, "Finalizing...");
+    await workPromise;
+    if (workError) throw workError;
+
+    await animateGenerateProgress(95, 100, 2000, "Finalizing...");
+    await showGenerateSuccessMessage();
+    return workResult;
+  } catch (error) {
+    const text = formatIpcError(error);
+    setGenerateProgress(0, "Generation failed");
+    setStatus(text, "error", { silentToast: true });
+    showToast(text, "error", 6500);
+    return undefined;
+  } finally {
+    document.body.classList.remove("is-busy", "is-generating");
+    showGenerateProgress(false);
   }
 }
 
@@ -1021,7 +1165,7 @@ async function saveEntryFromUi() {
     syncTagHighlights();
     await learnCustomTagsFromEntry({ silent: false });
     await refreshMonthSummary();
-    setStatus(`Saved ${el.entryDate.value}: ${result.fileStatus}`, "success");
+    setStatus(`Saved ${el.entryDate.value}: ${result.fileStatus}`, "success", { silentToast: true });
     showToast("Entry saved", "success");
   });
 }
@@ -1034,10 +1178,14 @@ async function importSupFromUi() {
       return;
     }
 
+    const previousMonth = el.monthInput.value;
     if (result.months?.length === 1 && el.monthInput) {
       el.monthInput.value = result.months[0];
     }
 
+    if (el.monthInput.value !== previousMonth) {
+      resetExportSection();
+    }
     await refreshMonthSummary();
     await refreshTemplatePath();
     await loadMonthPreview();
@@ -1051,7 +1199,7 @@ async function importSupFromUi() {
       .filter(Boolean)
       .join(" · ");
 
-    setStatus(`Sup! import complete: ${summary}`, "success");
+    setStatus(`Sup! import complete: ${summary}`, "success", { silentToast: true });
     showToast(`Imported ${result.imported} standup day(s)`, "success");
   });
 }
@@ -1115,10 +1263,10 @@ async function refreshTemplatePath() {
   if (!el.monthInput.value) return;
   try {
     const result = await api.resolveTemplate(el.monthInput.value);
-    updateTemplateDisplay(result.templatePath, true);
+    updateTemplateDisplay(result.templatePath, result.templateStatus === "ready", result.templateStatus);
     updateOutputNamePreview();
   } catch (error) {
-    updateTemplateDisplay(error?.message ?? "Template not found", false);
+    updateTemplateDisplay(error?.message ?? "Template not found", false, "missing");
     updateOutputNamePreview();
   }
 }
@@ -1138,7 +1286,11 @@ async function loadMonthPreview() {
   if (!el.monthInput.value) return;
   await runWithStatus("Loading preview...", async () => {
     const preview = await api.monthPreview(el.monthInput.value);
-    updateTemplateDisplay(preview.templatePath, true);
+    updateTemplateDisplay(
+      preview.templatePath,
+      preview.templateStatus === "ready",
+      preview.templateStatus ?? (preview.templatePath ? "ready" : "pending")
+    );
     renderPreviewTable(preview);
     setStatus(
       `Preview ready: ${preview.filledDates.length}/${preview.expectedWorkingDays} working days filled`,
@@ -1215,36 +1367,6 @@ function renderValidationPanel(validation) {
   `;
 
   el.validationMissingList.innerHTML = "";
-  if (validation.outputPath) {
-    const pathItem = document.createElement("li");
-    pathItem.textContent = `Excel: ${validation.outputPath}`;
-    el.validationMissingList.appendChild(pathItem);
-  }
-  if (validation.pdfPath) {
-    const pdfItem = document.createElement("li");
-    pdfItem.textContent = `PDF: ${validation.pdfPath}`;
-    el.validationMissingList.appendChild(pdfItem);
-  }
-  if (validation.pdfError) {
-    const pdfErrorItem = document.createElement("li");
-    pdfErrorItem.textContent = `PDF export failed: ${validation.pdfError}`;
-    el.validationMissingList.appendChild(pdfErrorItem);
-  }
-  if (validation.overtime) {
-    const overtimeItem = document.createElement("li");
-    overtimeItem.textContent = formatOvertimeStatus(validation.overtime);
-    el.validationMissingList.appendChild(overtimeItem);
-  }
-  (validation.missingDays ?? []).forEach((date) => {
-    const item = document.createElement("li");
-    item.textContent = `Missing or incomplete: ${formatPreviewDate(date)}`;
-    el.validationMissingList.appendChild(item);
-  });
-  if (!validation.missingDays?.length && validation.exists) {
-    const item = document.createElement("li");
-    item.textContent = passed ? "All working days look complete" : "Workbook found but no fully filled rows yet";
-    el.validationMissingList.appendChild(item);
-  }
   replayAnimation(el.validationPanel, "updated");
 }
 
@@ -1264,6 +1386,8 @@ function insertTag(tag) {
   updateEntryCounts();
   syncTagHighlights();
 }
+
+const DEFAULT_TIMESHEET_ROLE = "Junior QA Consult";
 
 const DEFAULT_ENTRY_TAGS = ["Meeting", "Testing", "Develop", "Migrate", "Design"];
 let learnCustomTagsTimer = null;
@@ -1317,6 +1441,59 @@ function createTagButton(label, { custom = false } = {}) {
   return button;
 }
 
+function createSavedTagChip(label) {
+  const wrap = document.createElement("div");
+  wrap.className = "tag-chip-wrap is-custom";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "tag-chip is-custom";
+  button.dataset.tag = formatTagToken(label);
+  button.textContent = label;
+  button.addEventListener("click", () => insertTag(button.dataset.tag));
+
+  const removeButton = document.createElement("button");
+  removeButton.type = "button";
+  removeButton.className = "tag-chip-remove";
+  removeButton.setAttribute("aria-label", `Remove ${label} tag`);
+  removeButton.title = `Remove ${label}`;
+  removeButton.innerHTML =
+    '<svg viewBox="0 0 10 10" width="8" height="8" aria-hidden="true"><path d="M2.25 2.25 7.75 7.75M7.75 2.25 2.25 7.75" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  removeButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void removeCustomTag(label);
+  });
+
+  wrap.append(button, removeButton);
+  return wrap;
+}
+
+async function removeCustomTag(label) {
+  if (!state.settingsAutosaveReady) return;
+
+  const key = normalizeTagLabel(label).toLowerCase();
+  const current = state.settings?.customTags ?? [];
+  const next = current.filter((tag) => normalizeTagLabel(tag).toLowerCase() !== key);
+  if (next.length === current.length) return;
+
+  try {
+    state.settings = await api.saveSettings({
+      ...readSettingsForm(),
+      customTags: next
+    });
+    if (document.querySelector(".view.active")?.id === "settingsView") {
+      captureSettingsSnapshot();
+      updateSettingsAutosaveState("saved");
+    } else {
+      state.settingsSnapshot = normalizedSettingsForCompare(state.settings);
+    }
+    renderTagButtons(state.settings.customTags ?? []);
+  } catch {
+    /* ignore transient save errors */
+  }
+}
+
 function renderTagButtons(customTags = state.settings?.customTags ?? []) {
   if (el.tagButtonsDefault) {
     el.tagButtonsDefault.innerHTML = "";
@@ -1329,7 +1506,7 @@ function renderTagButtons(customTags = state.settings?.customTags ?? []) {
   if (el.tagButtonsSaved) {
     el.tagButtonsSaved.innerHTML = "";
     saved.forEach((label) => {
-      el.tagButtonsSaved.appendChild(createTagButton(label, { custom: true }));
+      el.tagButtonsSaved.appendChild(createSavedTagChip(label));
     });
   }
   el.tagGroupSaved?.classList.toggle("hidden", saved.length === 0);
@@ -1480,11 +1657,17 @@ function basename(value) {
   return String(value).split(/[\\/]/).pop() || String(value);
 }
 
-function updateTemplateDisplay(value, found) {
+function updateTemplateDisplay(value, found, status = found ? "ready" : "missing") {
+  const isPending = status === "pending";
   const text = value || "-";
   el.templatePathText.textContent = text;
-  el.templateFileName.textContent = found ? basename(text) : "Template not found";
+  el.templateFileName.textContent = isPending || found ? basename(text) : "Template not found";
   if (el.templateStatusBadge) {
+    if (isPending) {
+      el.templateStatusBadge.classList.add("hidden");
+      return;
+    }
+    el.templateStatusBadge.classList.remove("hidden");
     el.templateStatusBadge.textContent = found ? "Found" : "Missing";
     el.templateStatusBadge.className = `cloud-badge ${found ? "active" : "missing"}`;
   }
@@ -1494,16 +1677,141 @@ function updateExportActions() {
   el.exportStep?.classList.toggle("has-output", Boolean(state.lastOutputPath));
 }
 
+function resetExportSection() {
+  state.lastOutputPath = undefined;
+  state.lastPdfPath = undefined;
+  hideOutputActionsAnimated();
+  if (el.openOutputButton) el.openOutputButton.disabled = true;
+  if (el.openPdfButton) el.openPdfButton.disabled = true;
+  el.validationPanel?.classList.add("hidden");
+  if (el.validationGrid) el.validationGrid.innerHTML = "";
+  if (el.validationMissingList) el.validationMissingList.innerHTML = "";
+  el.generateResult?.classList.add("hidden");
+}
+
+async function handleTimesheetMonthChange() {
+  window.ModernPickers?.closeAll?.();
+  resetExportSection();
+  await refreshMonthSummary();
+  await refreshOvertimePanel({ resetToggle: true });
+  await refreshTemplatePath();
+  await loadMonthPreview();
+}
+
+function hideOutputActionsAnimated() {
+  const container = el.exportStep?.querySelector(".actions-output");
+  container?.classList.remove("is-visible");
+  el.exportStep?.classList.remove("has-output");
+}
+
+function showOutputActionsAnimated() {
+  if (!state.lastOutputPath) return;
+  updateExportActions();
+  const container = el.exportStep?.querySelector(".actions-output");
+  if (!container) return;
+  container.classList.remove("is-visible");
+  void container.offsetWidth;
+  container.classList.add("is-visible");
+}
+
+const TOAST_ICONS = {
+  success:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  error:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m15 9-6 6M9 9l6 6" stroke-linecap="round"/></svg>',
+  info:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 8h.01" stroke-linecap="round"/></svg>'
+};
+
+let toastDismissTimer = null;
+
+function syncToastAnchor() {
+  const workspace = document.querySelector(".workspace");
+  if (!workspace) return;
+
+  const workspaceRect = workspace.getBoundingClientRect();
+  let top = workspaceRect.top + 12;
+
+  const topbar = document.querySelector(".topbar");
+  if (topbar) {
+    const topbarRect = topbar.getBoundingClientRect();
+    const topbarVisible =
+      topbarRect.bottom > workspaceRect.top + 4 && topbarRect.top < workspaceRect.bottom;
+    if (topbarVisible) {
+      top = Math.max(top, topbarRect.bottom + 10);
+    }
+  }
+
+  if (el.updateBanner && !el.updateBanner.classList.contains("hidden")) {
+    const bannerRect = el.updateBanner.getBoundingClientRect();
+    const bannerVisible =
+      bannerRect.bottom > workspaceRect.top + 4 && bannerRect.top < workspaceRect.bottom;
+    if (bannerVisible) {
+      top = Math.max(top, bannerRect.bottom + 10);
+    }
+  }
+
+  document.documentElement.style.setProperty("--toast-top", `${Math.round(top)}px`);
+  document.documentElement.style.setProperty("--toast-left", `${Math.round(workspaceRect.left)}px`);
+  document.documentElement.style.setProperty("--toast-width", `${Math.round(workspaceRect.width)}px`);
+}
+
+document.querySelector(".workspace")?.addEventListener("scroll", syncToastAnchor, { passive: true });
+window.addEventListener("resize", syncToastAnchor);
+requestAnimationFrame(syncToastAnchor);
+
+function dismissToast(toast, { immediate = false } = {}) {
+  if (!toast || toast.classList.contains("leaving")) return;
+
+  if (toastDismissTimer) {
+    window.clearTimeout(toastDismissTimer);
+    toastDismissTimer = null;
+  }
+
+  const finish = () => {
+    toast.remove();
+  };
+
+  if (immediate) {
+    finish();
+    return;
+  }
+
+  toast.classList.add("leaving");
+  toast.addEventListener(
+    "animationend",
+    () => {
+      finish();
+    },
+    { once: true }
+  );
+}
+
 function showToast(message, type = "info", duration = 3200) {
   if (!el.toastStack) return;
+
+  syncToastAnchor();
+
+  el.toastStack.querySelectorAll(".toast").forEach((existing) => dismissToast(existing, { immediate: true }));
+
   const toast = document.createElement("div");
   toast.className = `toast toast-${type}`;
-  toast.textContent = message;
+  toast.setAttribute("role", type === "error" ? "alert" : "status");
+
+  const icon = document.createElement("span");
+  icon.className = "toast-icon";
+  icon.innerHTML = TOAST_ICONS[type] ?? TOAST_ICONS.info;
+
+  const text = document.createElement("span");
+  text.className = "toast-text";
+  text.textContent = message;
+
+  toast.append(icon, text);
+  toast.title = message;
+
   el.toastStack.appendChild(toast);
-  window.setTimeout(() => {
-    toast.classList.add("leaving");
-    toast.addEventListener("animationend", () => toast.remove(), { once: true });
-  }, duration);
+
+  toastDismissTimer = window.setTimeout(() => dismissToast(toast), duration);
 }
 
 async function refreshAppVersionLabel() {
@@ -1518,6 +1826,7 @@ async function refreshAppVersionLabel() {
 
 function hideUpdateBanner() {
   el.updateBanner?.classList.add("hidden");
+  requestAnimationFrame(syncToastAnchor);
 }
 
 function showUpdateBanner(result) {
@@ -1528,6 +1837,7 @@ function showUpdateBanner(result) {
     el.updateBannerText.textContent = `Version v${result.latestVersion} is available (you have v${result.currentVersion}).${notes}`;
   }
   el.updateBanner.classList.remove("hidden");
+  requestAnimationFrame(syncToastAnchor);
 }
 
 async function openPendingUpdateDownload() {
@@ -1670,7 +1980,7 @@ async function refreshCloudStorageStatus(showStatus = false) {
     updateSettingsAutosaveState("saved");
     updateSetupLock();
     showToast("Switched to this Google account's Drive folder", "success", 5200);
-    setStatus(`Data folder updated: ${syncStatus.storageRoot}`, "success");
+    setStatus(`Data folder updated: ${syncStatus.storageRoot}`, "success", { silentToast: true });
     void loadThaiHolidayPanel();
     void refreshMonthSummary();
     void refreshTemplatePath();
@@ -1754,14 +2064,14 @@ async function continueAfterStorageSetup(message) {
   await loadMonthPreview();
 
   if (isAppSetupComplete(state.settings)) {
-    setStatus(message, "success");
+    setStatus(message, "success", { silentToast: true });
     showToast(message, "success");
     return;
   }
 
   await requestShowView("settingsView", { force: true });
   el.staffNameInput?.focus();
-  setStatus("Storage ready — finish your profile in Settings", "success");
+  setStatus("Storage ready — finish your profile in Settings", "success", { silentToast: true });
   showToast("Next: fill Staff name and Site", "success", 4200);
 }
 
@@ -1800,7 +2110,7 @@ async function applyGoogleDriveFromUi() {
         if (!retry.ok) {
           await refreshCloudStorageStatus();
           const text = retry.error || "Could not set up that Google Drive folder";
-          setStatus(text, "error");
+          setStatus(text, "error", { silentToast: true });
           showToast(text, "error", 6500);
           return;
         }
@@ -1810,7 +2120,7 @@ async function applyGoogleDriveFromUi() {
       }
       await refreshCloudStorageStatus();
       const text = result.error || "Could not set up that Google Drive folder";
-      setStatus(text, "error");
+      setStatus(text, "error", { silentToast: true });
       showToast(text, "error", 6500);
       return;
     }
@@ -1922,7 +2232,6 @@ async function finishSetupFromUi() {
     updateSetupGateBanner();
     const firstEmpty = !el.staffNameInput.value.trim() ? el.staffNameInput : el.siteInput;
     firstEmpty?.focus();
-    showToast(`Please fill: ${missing.join(", ")}`, "error", 4200);
     setStatus(`Please fill: ${missing.join(", ")}`, "error");
     return;
   }
@@ -1935,7 +2244,7 @@ async function finishSetupFromUi() {
   } catch (error) {
     const text = formatIpcError(error);
     updateSettingsAutosaveState("error");
-    setStatus(text, "error");
+    setStatus(text, "error", { silentToast: true });
     showToast(text, "error", 6500);
     return;
   }
@@ -1945,8 +2254,8 @@ async function finishSetupFromUi() {
     return;
   }
 
+  setStatus("Setup complete", "success", { silentToast: true });
   showToast("Setup complete", "success");
-  setStatus("Setup complete", "success");
   await requestShowView("entryView", { force: true });
 }
 
@@ -2247,7 +2556,7 @@ async function saveLeaveFromUi() {
     });
     await refreshMonthSummary();
     await loadMonthPreview();
-    setStatus(`Leave saved for ${el.leaveDateInput.value}`, "success");
+    setStatus(`Leave saved for ${el.leaveDateInput.value}`, "success", { silentToast: true });
     showToast("Leave saved", "success");
   });
 }
@@ -2268,7 +2577,7 @@ async function clearLeaveFromUi() {
     updateLeaveHalfDayVisibility();
     await refreshMonthSummary();
     await loadMonthPreview();
-    setStatus(`Leave cleared for ${el.leaveDateInput.value}`, "success");
+    setStatus(`Leave cleared for ${el.leaveDateInput.value}`, "success", { silentToast: true });
     showToast("Leave cleared", "success");
   });
 }
@@ -2303,6 +2612,32 @@ function resetOvertimeFormFields() {
   if (el.overtimeDetailInput) el.overtimeDetailInput.value = "";
 }
 
+function beginOvertimeNewSlot() {
+  state.editingOvertimeId = null;
+  resetOvertimeFormFields();
+  updateOvertimeFormMode();
+}
+
+function beginOvertimeEdit(entry) {
+  if (!entry || !el.overtimeDateInput) return;
+  if (el.hasOvertimeCheckbox) {
+    el.hasOvertimeCheckbox.checked = true;
+    updateOvertimeFormVisibility();
+  }
+  state.editingOvertimeId = entry.id;
+  el.overtimeDateInput.value = entry.date;
+  if (el.overtimeTimeInInput) el.overtimeTimeInInput.value = entry.timeIn ?? "18:00";
+  if (el.overtimeTimeOutInput) el.overtimeTimeOutInput.value = entry.timeOut ?? "20:00";
+  setOvertimeLunch(entry.includedLunchTime ?? "NO");
+  if (el.overtimeDetailInput) el.overtimeDetailInput.value = entry.detail ?? "";
+  updateOvertimeFormMode();
+}
+
+function updateOvertimeFormMode() {
+  if (!el.saveOvertimeButton) return;
+  el.saveOvertimeButton.textContent = state.editingOvertimeId ? "Update OT" : "Save OT";
+}
+
 function renderOvertimeEntryList(entries) {
   if (!el.overtimeEntryList) return;
   el.overtimeEntryList.innerHTML = "";
@@ -2323,10 +2658,18 @@ function renderOvertimeEntryList(entries) {
         <span class="overtime-entry-meta">${escapeHtml(lunchLabel)}</span>
         <span class="overtime-entry-detail">${escapeHtml(entry.detail)}</span>
       </div>
-      <button type="button" class="overtime-entry-edit">Edit</button>
+      <div class="overtime-entry-actions">
+        <button type="button" class="overtime-entry-edit">Edit</button>
+        <button type="button" class="overtime-entry-delete">Delete</button>
+      </div>
     `;
     item.querySelector(".overtime-entry-edit")?.addEventListener("click", () => {
-      void fillOvertimeForm(entry.date);
+      beginOvertimeEdit(entry);
+      document.querySelector('.timesheet-step[data-step="2"]')?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      el.overtimeDetailInput?.focus();
+    });
+    item.querySelector(".overtime-entry-delete")?.addEventListener("click", () => {
+      void deleteOvertimeEntry(entry);
     });
     el.overtimeEntryList.appendChild(item);
   });
@@ -2349,9 +2692,9 @@ async function refreshOvertimePanel(options = {}) {
     if (el.overtimeDateInput) el.overtimeDateInput.value = `${month}-01`;
   }
   if (el.hasOvertimeCheckbox.checked) {
-    await loadOvertimeForDate();
+    updateOvertimeFormMode();
   } else {
-    resetOvertimeFormFields();
+    beginOvertimeNewSlot();
   }
 }
 
@@ -2362,22 +2705,9 @@ async function fillOvertimeForm(date) {
     updateOvertimeFormVisibility();
   }
   el.overtimeDateInput.value = date;
-  await loadOvertimeForDate();
+  beginOvertimeNewSlot();
   document.querySelector('.timesheet-step[data-step="2"]')?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   el.overtimeDetailInput?.focus();
-}
-
-async function loadOvertimeForDate() {
-  if (!el.overtimeDateInput?.value) return;
-  const existing = await api.loadOvertime(el.overtimeDateInput.value);
-  if (!existing) {
-    resetOvertimeFormFields();
-    return;
-  }
-  if (el.overtimeTimeInInput) el.overtimeTimeInInput.value = existing.timeIn ?? "18:00";
-  if (el.overtimeTimeOutInput) el.overtimeTimeOutInput.value = existing.timeOut ?? "20:00";
-  setOvertimeLunch(existing.includedLunchTime ?? "NO");
-  if (el.overtimeDetailInput) el.overtimeDetailInput.value = existing.detail ?? "";
 }
 
 async function saveOvertimeFromUi() {
@@ -2394,35 +2724,55 @@ async function saveOvertimeFromUi() {
     return;
   }
   await runWithStatus("Saving overtime...", async () => {
+    const wasEditing = Boolean(state.editingOvertimeId);
+    const savedDate = el.overtimeDateInput.value;
     await api.saveOvertime({
-      date: el.overtimeDateInput.value,
+      id: state.editingOvertimeId ?? undefined,
+      date: savedDate,
       timeIn: el.overtimeTimeInInput?.value,
       timeOut: el.overtimeTimeOutInput?.value,
       includedLunchTime: getSelectedOvertimeLunch(),
       detail: el.overtimeDetailInput.value
     });
     await refreshOvertimePanel();
+    beginOvertimeNewSlot();
+    if (el.overtimeDateInput) el.overtimeDateInput.value = savedDate;
     await loadMonthPreview();
-    setStatus(`Overtime saved for ${el.overtimeDateInput.value}`, "success");
-    showToast("Overtime saved", "success");
+    setStatus(`Overtime saved for ${savedDate}`, "success", { silentToast: true });
+    showToast(wasEditing ? "Overtime updated" : "Overtime saved", "success");
+  });
+}
+
+async function deleteOvertimeEntry(entry) {
+  const confirmed = await confirmAction(
+    `Delete overtime ${entry.timeIn ?? "18:00"}–${entry.timeOut ?? "20:00"} on ${entry.date}?`
+  );
+  if (!confirmed) return;
+  await runWithStatus("Deleting overtime...", async () => {
+    await api.removeOvertime({ date: entry.date, id: entry.id });
+    if (state.editingOvertimeId === entry.id) {
+      beginOvertimeNewSlot();
+    }
+    await refreshOvertimePanel();
+    await loadMonthPreview();
+    showToast("Overtime deleted", "success");
   });
 }
 
 async function clearOvertimeFromUi() {
-  if (!el.overtimeDateInput?.value) {
-    setStatus("Select an overtime date first", "error");
+  if (state.editingOvertimeId) {
+    const month = el.monthInput?.value;
+    const entries = month ? await api.loadOvertimeMonth(month) : [];
+    const entry = entries.find((candidate) => candidate.id === state.editingOvertimeId);
+    if (entry) {
+      await deleteOvertimeEntry(entry);
+      return;
+    }
+    beginOvertimeNewSlot();
     return;
   }
-  const confirmed = await confirmAction(`Clear overtime for ${el.overtimeDateInput.value}?`);
-  if (!confirmed) return;
-  await runWithStatus("Clearing overtime...", async () => {
-    await api.removeOvertime(el.overtimeDateInput.value);
-    resetOvertimeFormFields();
-    await refreshOvertimePanel();
-    await loadMonthPreview();
-    setStatus(`Overtime cleared for ${el.overtimeDateInput.value}`, "success");
-    showToast("Overtime cleared", "success");
-  });
+  beginOvertimeNewSlot();
+  showToast("Form cleared", "info", 2400);
 }
 
 async function refreshThaiHolidaysFromUi() {

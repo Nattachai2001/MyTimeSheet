@@ -17,7 +17,7 @@ import { resolveMonthTimesheetDetails } from "../timesheet/leave-resolver.js";
 import { LeaveTypeSchema } from "../timesheet/leave-types.js";
 import { OvertimeEntrySchema } from "../timesheet/overtime-types.js";
 import { generateTimesheet } from "../timesheet/excel-generator.js";
-import { resolveTemplatePathForMonth } from "../timesheet/template-resolver.js";
+import { ensureTemplateForMonth, expectedTemplatePathForMonth } from "../timesheet/ensure-template.js";
 import { resolveTimesheetOutputPath } from "../timesheet/output-path.js";
 import { exportWorkbookToPdf } from "../timesheet/pdf-exporter.js";
 import { buildMonthPreviewRows } from "../timesheet/preview-rows.js";
@@ -45,6 +45,7 @@ interface DesktopSettings {
   displayName: string;
   staffName: string;
   site: string;
+  role: string;
   storageRoot: string;
   templateFolder: string;
   templatePath?: string;
@@ -61,6 +62,7 @@ interface DesktopSettings {
 }
 
 const DEFAULT_ENTRY_TAGS = ["Meeting", "Testing", "Develop", "Migrate", "Design"] as const;
+const DEFAULT_TIMESHEET_ROLE = "Junior QA Consult";
 
 let mainWindow: BrowserWindow | undefined;
 let tray: Tray | undefined;
@@ -101,7 +103,7 @@ app.whenReady().then(async () => {
   applyLoginItemSettings(settings.startAtLogin);
   if (startHidden && tray) {
     tray.displayBalloon({
-      title: "Sup Timesheet Automation",
+      title: "My TimeSheet",
       content: "Running in the background. Double-click the tray icon to open."
     });
   }
@@ -147,7 +149,7 @@ function createWindow(options: { show?: boolean } = {}): void {
     height: 760,
     minWidth: 860,
     minHeight: 640,
-    title: "Sup Timesheet Automation",
+    title: "My TimeSheet",
     icon: loadAppIcon(256),
     frame: false,
     show,
@@ -198,7 +200,7 @@ function createTray(): void {
   } else {
     tray = new Tray(icon);
   }
-  tray.setToolTip("Sup Timesheet Automation");
+  tray.setToolTip("My TimeSheet");
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "Open", click: () => showWindow() },
@@ -241,7 +243,7 @@ async function showTrayHintIfNeeded(): Promise<boolean> {
   }
   if (tray) {
     tray.displayBalloon({
-      title: "Sup Timesheet Automation",
+      title: "My TimeSheet",
       content: "App minimized to tray. Double-click the icon to reopen."
     });
   }
@@ -585,7 +587,7 @@ ipcMain.handle("overtime:load-month", async (_event, month: string) => {
 
 ipcMain.handle("overtime:load", async (_event, date: string) => {
   const config = await buildConfig(date.slice(0, 7));
-  return new OvertimeRecordRepository(config.storage.rootDirectory).readEntry(date);
+  return new OvertimeRecordRepository(config.storage.rootDirectory).readEntriesForDate(date);
 });
 
 ipcMain.handle(
@@ -593,6 +595,7 @@ ipcMain.handle(
   async (
     _event,
     payload: {
+      id?: string;
       date: string;
       timeIn?: string;
       timeOut?: string;
@@ -603,6 +606,7 @@ ipcMain.handle(
     const config = await buildConfig(payload.date.slice(0, 7));
     const entry = await new OvertimeRecordRepository(config.storage.rootDirectory).saveEntry(
       OvertimeEntrySchema.parse({
+        id: payload.id,
         date: payload.date,
         timeIn: payload.timeIn?.trim() || config.timesheet.defaultOvertimeTimeIn,
         timeOut: payload.timeOut?.trim() || config.timesheet.defaultOvertimeTimeOut,
@@ -614,10 +618,23 @@ ipcMain.handle(
   }
 );
 
-ipcMain.handle("overtime:remove", async (_event, date: string) => {
-  const config = await buildConfig(date.slice(0, 7));
-  return new OvertimeRecordRepository(config.storage.rootDirectory).removeEntry(date);
-});
+ipcMain.handle(
+  "overtime:remove",
+  async (_event, payload: string | { date: string; id?: string }) => {
+    const repository = new OvertimeRecordRepository(
+      (await buildConfig(
+        typeof payload === "string" ? payload.slice(0, 7) : payload.date.slice(0, 7)
+      )).storage.rootDirectory
+    );
+    if (typeof payload === "string") {
+      return repository.removeEntriesForDate(payload);
+    }
+    if (payload.id) {
+      return repository.removeEntryById(payload.id, payload.date.slice(0, 7));
+    }
+    return repository.removeEntriesForDate(payload.date);
+  }
+);
 
 ipcMain.handle("timesheet:preview", async (_event, month: string) => {
   const config = await buildConfig(month);
@@ -627,18 +644,15 @@ ipcMain.handle("timesheet:preview", async (_event, month: string) => {
   const calendar = workCalendarFromConfig(config);
   const leaveEntries = await new LeaveRecordRepository(config.storage.rootDirectory).readMonth(month);
   const details = resolveMonthTimesheetDetails(month, records, calendar, leaveEntries);
-  const templatePath = resolveTemplatePathForMonth({
-    month,
-    templateFolder: settings.templateFolder,
-    templatePath: settings.templatePath,
-    rootDirectory: config.storage.rootDirectory,
-    configuredFilename: config.timesheet.templateFilename
-  });
+  const templateFolder = settings.templateFolder ?? path.join(config.storage.rootDirectory, "templates");
+  const expectedPath = expectedTemplatePathForMonth(templateFolder, month);
+  const templateReady = existsSync(expectedPath);
   const filledDates = details.filter((detail) => detail.source !== "missing").map((detail) => detail.date);
   const missingDates = details.filter((detail) => detail.source === "missing").map((detail) => detail.date);
   return {
     month,
-    templatePath,
+    templatePath: templateReady ? path.resolve(expectedPath) : expectedPath,
+    templateStatus: templateReady ? ("ready" as const) : ("pending" as const),
     details,
     rows: buildMonthPreviewRows(month, details, calendar, config),
     filledDates,
@@ -648,16 +662,16 @@ ipcMain.handle("timesheet:preview", async (_event, month: string) => {
 });
 
 ipcMain.handle("timesheet:resolve-template", async (_event, month: string) => {
-  const config = await buildConfig();
+  const config = await buildConfig(month);
   const settings = await readSettings();
-  const templatePath = resolveTemplatePathForMonth({
+  const templateFolder = settings.templateFolder ?? path.join(config.storage.rootDirectory, "templates");
+  const expectedPath = expectedTemplatePathForMonth(templateFolder, month);
+  const templateReady = existsSync(expectedPath);
+  return {
     month,
-    templateFolder: settings.templateFolder,
-    templatePath: settings.templatePath,
-    rootDirectory: config.storage.rootDirectory,
-    configuredFilename: config.timesheet.templateFilename
-  });
-  return { month, templatePath };
+    templatePath: templateReady ? path.resolve(expectedPath) : expectedPath,
+    templateStatus: templateReady ? ("ready" as const) : ("pending" as const)
+  };
 });
 
 ipcMain.handle("timesheet:validate", async (_event, payload: { month: string; outputPath?: string }) => {
@@ -710,12 +724,13 @@ ipcMain.handle("timesheet:generate", async (_event, month: string) => {
     extension: "pdf"
   });
 
-  const templatePath = resolveTemplatePathForMonth({
+  const templateFolder = settings.templateFolder ?? path.join(config.storage.rootDirectory, "templates");
+  const { templatePath, created: templateCreated } = await ensureTemplateForMonth({
     month,
-    templateFolder: settings.templateFolder,
-    templatePath: settings.templatePath,
-    rootDirectory: config.storage.rootDirectory,
-    configuredFilename: config.timesheet.templateFilename
+    config,
+    templateFolder,
+    configuredFilename: config.timesheet.templateFilename,
+    bundledTemplateFolder: path.join(app.getAppPath(), "templates")
   });
 
   const result = await generateTimesheet({
@@ -726,14 +741,17 @@ ipcMain.handle("timesheet:generate", async (_event, month: string) => {
     config,
     overtimeEntries: await new OvertimeRecordRepository(config.storage.rootDirectory).readMonth(month)
   });
+
   const validation = await validateWorkbook(outputPath, month, config);
+
   let pdfError: string | undefined;
   try {
     await exportWorkbookToPdf(outputPath, pdfPath);
   } catch (error) {
     pdfError = error instanceof Error ? error.message : String(error);
   }
-  return { ...result, validation, templatePath, pdfPath, pdfError };
+
+  return { ...result, validation, templatePath, templateCreated, pdfPath, pdfError };
 });
 
 ipcMain.handle("timesheet:previous-month", () => previousMonthBangkok());
@@ -879,6 +897,7 @@ async function buildConfig(month?: string): Promise<AppConfig> {
   base.slack.displayName = settings.displayName;
   base.timesheet.staffName = settings.staffName;
   base.timesheet.site = settings.site;
+  base.timesheet.role = settings.role;
   base.storage.rootDirectory = settings.storageRoot;
   base.work.workingDays = settings.workingDays;
   base.work.extraHolidayDates = settings.extraHolidayDates;
@@ -908,6 +927,7 @@ async function ensureSettings(): Promise<void> {
     displayName: "",
     staffName: "",
     site: "",
+    role: DEFAULT_TIMESHEET_ROLE,
     storageRoot: "",
     templateFolder: "",
     reminderTime: "12:00",
@@ -1002,6 +1022,7 @@ function normalizeSettings(raw: DesktopSettings): DesktopSettings {
     displayName: resolveInternalDisplayName(raw),
     staffName: raw.staffName?.trim() ?? "",
     site: raw.site?.trim() ?? "",
+    role: raw.role?.trim() || DEFAULT_TIMESHEET_ROLE,
     storageRoot,
     templateFolder,
     workingDays: raw.workingDays ?? [1, 2, 3, 4, 5],
@@ -1055,6 +1076,7 @@ async function applyStorageRoot(
     displayName: current.displayName?.trim() || cloud?.displayName || "",
     staffName: current.staffName?.trim() || cloud?.staffName || "",
     site: current.site?.trim() || cloud?.site || "",
+    role: current.role?.trim() || cloud?.role || DEFAULT_TIMESHEET_ROLE,
     reminderTime: current.reminderTime || cloud?.reminderTime || "12:00",
     workingDays: current.workingDays?.length ? current.workingDays : cloud?.workingDays ?? [1, 2, 3, 4, 5],
     extraHolidayDates: current.extraHolidayDates?.length

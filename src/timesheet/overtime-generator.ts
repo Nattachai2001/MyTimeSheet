@@ -2,19 +2,30 @@ import ExcelJS from "exceljs";
 
 import { AppConfig } from "../config/env.js";
 import { dateToDisplay } from "../shared/date.js";
-import { OvertimeEntry, OvertimeFillResult } from "./overtime-types.js";
+import { OvertimeEntryInput, OvertimeFillResult } from "./overtime-types.js";
 import { applyDetailRowHeight } from "./row-height.js";
+import {
+  applyTimesheetMetadataFonts
+} from "./timesheet-cell-style.js";
 import { cellText, detectOvertimeMapping, normalizeHeader, TimesheetTemplateMapping } from "./template-mapper.js";
 
 export interface FillOvertimeOptions {
-  entries: OvertimeEntry[];
+  entries: OvertimeEntryInput[];
   config: AppConfig;
   month: string;
 }
 
+function sortOvertimeEntries(entries: OvertimeEntryInput[]): OvertimeEntryInput[] {
+  return [...entries].sort((left, right) => {
+    const dateCompare = left.date.localeCompare(right.date);
+    if (dateCompare !== 0) return dateCompare;
+    return (left.timeIn ?? "").localeCompare(right.timeIn ?? "");
+  });
+}
+
 export function fillOvertimeSheet(workbook: ExcelJS.Workbook, options: FillOvertimeOptions): OvertimeFillResult {
   const mapping = detectOvertimeMapping(workbook);
-  const entries = options.entries.filter((entry) => entry.detail.trim());
+  const entries = sortOvertimeEntries(options.entries).filter((entry) => entry.detail.trim());
 
   if (!entries.length) {
     if (mapping) {
@@ -78,7 +89,7 @@ function fillOvertimeRow(
   worksheet: ExcelJS.Worksheet,
   rowNumber: number,
   mapping: TimesheetTemplateMapping,
-  entry: OvertimeEntry,
+  entry: OvertimeEntryInput,
   config: AppConfig
 ): void {
   const row = worksheet.getRow(rowNumber);
@@ -93,7 +104,6 @@ function fillOvertimeRow(
   const detailCell = row.getCell(mapping.columns.detail);
   const detailText = entry.detail.trim();
   detailCell.value = detailText;
-  detailCell.alignment = { ...(detailCell.alignment ?? {}), wrapText: true, vertical: "top" };
   applyDetailRowHeight(worksheet, row, mapping.columns.detail, detailText);
   row.commit();
 }
@@ -108,4 +118,5 @@ function updateMetadata(
   if (metadataCells.period) worksheet.getCell(metadataCells.period).value = period;
   if (metadataCells.staffName) worksheet.getCell(metadataCells.staffName).value = options.config.timesheet.staffName;
   if (metadataCells.site) worksheet.getCell(metadataCells.site).value = options.config.timesheet.site;
+  applyTimesheetMetadataFonts(worksheet, metadataCells);
 }

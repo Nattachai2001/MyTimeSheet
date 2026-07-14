@@ -1,6 +1,8 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
+import { templateFilenameForMonth } from "./template-filename.js";
+
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export function resolveTemplatePathForMonth(options: {
@@ -21,7 +23,7 @@ export function resolveTemplatePathForMonth(options: {
   const candidates = [
     path.join(templateFolder, `${options.month}.xlsx`),
     shortMonth ? path.join(templateFolder, `${shortMonth} ${year}.xlsx`) : undefined,
-    shortMonth ? path.join(templateFolder, `${monthNumber}. ${shortMonth} ${year} - TimeSheet_Template - Skilllane.xlsx`) : undefined,
+    shortMonth ? path.join(templateFolder, templateFilenameForMonth(options.month)) : undefined,
     path.join(templateFolder, "default.xlsx"),
     options.templatePath,
     configuredFilename ? path.join(options.rootDirectory, "templates", configuredFilename) : undefined,

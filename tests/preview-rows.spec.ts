@@ -108,6 +108,8 @@ describe("buildMonthPreviewRows", () => {
     });
     expect(weekend).toMatchObject({
       rowKind: "weekend",
+      taskCode: "H1 - Holiday",
+      role: "Junior QA Consult",
       detail: "",
       isMuted: true
     });

@@ -1,6 +1,6 @@
 {
   "name": "sup-timesheet-automation",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "timesheetUpdate": {
     "provider": "github",
     "owner": "Nattachai2001",
@@ -56,7 +56,7 @@
   "main": "dist/src/desktop/main.js",
   "build": {
     "appId": "com.skilllane.sup-timesheet-automation",
-    "productName": "Sup Timesheet Automation",
+    "productName": "My TimeSheet",
     "publish": null,
     "icon": "desktop/assets/app-icon.png",
     "directories": {

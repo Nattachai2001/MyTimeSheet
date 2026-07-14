@@ -120,4 +120,76 @@ describe("overtime generation", () => {
     expect(cellText(row.getCell(mapping!.columns.timeOut))).toBe("20:00");
     expect(cellText(row.getCell(mapping!.columns.detail))).toContain("Regression overtime");
   });
+
+  it.skipIf(!existsSync(templatePath))("restores overtime sheet styles from template", async () => {
+    await rm(path.dirname(outputPath), { recursive: true, force: true });
+    await mkdir(path.dirname(outputPath), { recursive: true });
+
+    const longDetail = "[Testing]SKL-19998 - ".repeat(6);
+    await generateTimesheet({
+      templatePath,
+      outputPath,
+      month: "2026-07",
+      details: [
+        {
+          date: "2026-07-01",
+          detail: "[Meeting]\nSprint planning",
+          source: "same-report-today"
+        }
+      ],
+      config: testConfig,
+      overtimeEntries: [
+        {
+          date: "2026-07-09",
+          timeIn: "18:00",
+          timeOut: "20:00",
+          includedLunchTime: "NO",
+          detail: longDetail
+        }
+      ]
+    });
+
+    const dir = `tmp/test-ot-styles-${Date.now()}`;
+    const { execSync } = await import("node:child_process");
+    const { mkdirSync, readFileSync, rmSync } = await import("node:fs");
+    mkdirSync(dir, { recursive: true });
+    execSync(`tar -xf "${outputPath}" -C "${dir}"`, { stdio: "pipe" });
+    const styles = readFileSync(`${dir}/xl/styles.xml`, "utf8");
+    const sheet2 = readFileSync(`${dir}/xl/worksheets/sheet2.xml`, "utf8");
+    rmSync(dir, { recursive: true, force: true });
+
+    const h7 = sheet2.match(/<c[^>]*r="H7"[^>]*s="(\d+)"/)?.[1];
+    const d7 = sheet2.match(/<c[^>]*r="D7"[^>]*s="(\d+)"/)?.[1];
+    const a6 = sheet2.match(/<c[^>]*r="A6"[^>]*s="(\d+)"/)?.[1];
+    const a3 = sheet2.match(/<c[^>]*r="A3"[^>]*s="(\d+)"/)?.[1];
+
+    expect(h7).toBe("63");
+    expect(d7).toBe("60");
+    expect(a6).toBe("14");
+    expect(a3).toBe("7");
+
+    const readXf = (index: string) => {
+      const body = styles.match(/<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/)?.[1] ?? "";
+      let position = 0;
+      let xfIndex = 0;
+      while (position < body.length) {
+        const start = body.indexOf("<xf", position);
+        if (start === -1) break;
+        const openEnd = body.indexOf(">", start);
+        const element =
+          body[openEnd - 1] === "/"
+            ? body.slice(start, openEnd + 1)
+            : body.slice(start, body.indexOf("</xf>", openEnd + 1) + 5);
+        if (String(xfIndex) === index) return element;
+        xfIndex += 1;
+        position = start + element.length;
+      }
+      return "";
+    };
+
+    expect(readXf("7")).toContain('horizontal="right"');
+    expect(readXf("14")).toContain('horizontal="center"');
+    expect(readXf("60")).toContain('horizontal="center"');
+    expect(readXf("63")).toContain('wrapText="1"');
+  });
 });

@@ -36,7 +36,7 @@ describe("update-check", () => {
   it("prefers setup installer assets", () => {
     const assets = [
       { name: "checksums.txt", browser_download_url: "https://example.com/checksums.txt" },
-      { name: "Sup Timesheet Automation Setup 0.2.5.exe", browser_download_url: "https://example.com/setup.exe" }
+      { name: "My TimeSheet Setup 0.2.5.exe", browser_download_url: "https://example.com/setup.exe" }
     ];
     expect(pickWindowsInstallerAsset(assets)?.browser_download_url).toBe("https://example.com/setup.exe");
   });
@@ -47,7 +47,7 @@ describe("update-check", () => {
       body: "Bug fixes",
       assets: [
         {
-          name: "Sup Timesheet Automation Setup 0.2.5.exe",
+          name: "My TimeSheet Setup 0.2.5.exe",
           browser_download_url: "https://github.com/example/repo/releases/download/v0.2.5/setup.exe"
         }
       ]

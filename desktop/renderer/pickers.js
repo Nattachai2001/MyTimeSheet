@@ -183,6 +183,7 @@ const ModernPickers = (() => {
   function closePicker(popover, wrapper) {
     if (!popover || !wrapper) return;
     popover.classList.add("hidden");
+    resetPopoverStyles(popover);
     wrapper.querySelector(".picker-trigger")?.setAttribute("aria-expanded", "false");
     unmountPopover(wrapper, popover);
     if (openPicker === popover) {
@@ -495,6 +496,7 @@ const ModernPickers = (() => {
   }
 
   function positionPopover(wrapper, popover) {
+    if (popover.classList.contains("hidden")) return;
     const rect = getAnchorRect(wrapper);
     if (!rect.width && !rect.height) return;
 
@@ -687,7 +689,7 @@ const ModernPickers = (() => {
     document.querySelectorAll(".picker-native").forEach((node) => refresh(node));
   }
 
-  return { init, refresh, refreshAll };
+  return { init, refresh, refreshAll, closeAll: closeAllPickers };
 })();
 
 window.ModernPickers = ModernPickers;

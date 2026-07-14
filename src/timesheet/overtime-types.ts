@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
-export const OvertimeEntrySchema = z.object({
+export const OvertimeEntryInputSchema = z.object({
+  id: z.string().uuid().optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   timeIn: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   timeOut: z.string().regex(/^\d{2}:\d{2}$/).optional(),
@@ -10,7 +12,13 @@ export const OvertimeEntrySchema = z.object({
   role: z.string().optional()
 });
 
-export type OvertimeEntry = z.infer<typeof OvertimeEntrySchema>;
+export const OvertimeEntrySchema = OvertimeEntryInputSchema.transform((entry) => ({
+  ...entry,
+  id: entry.id ?? randomUUID()
+}));
+
+export type OvertimeEntryInput = z.input<typeof OvertimeEntryInputSchema>;
+export type OvertimeEntry = z.output<typeof OvertimeEntrySchema>;
 
 export const OvertimeMonthRecordSchema = z.object({
   schemaVersion: z.literal(1),

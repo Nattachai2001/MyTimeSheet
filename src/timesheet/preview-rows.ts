@@ -60,19 +60,18 @@ function previewRowFromDetail(detail: ResolvedWorkDetail, config: AppConfig): Ti
 function previewRowForOffDay(
   date: string,
   rowKind: "holiday" | "weekend",
-  config: AppConfig,
-  detail: string
+  config: AppConfig
 ): TimesheetPreviewRow {
   return {
     date,
-    taskCode: rowKind === "holiday" ? config.timesheet.holidayTaskCode : "",
-    role: rowKind === "holiday" ? config.timesheet.role : "",
+    taskCode: config.timesheet.holidayTaskCode,
+    role: config.timesheet.role,
     dateDisplay: dateToDisplay(date),
     timeIn: "",
     timeOut: "",
     includedLunch: "",
     hours: "",
-    detail,
+    detail: "",
     source: rowKind,
     rowKind,
     isMissing: false,
@@ -98,11 +97,11 @@ export function buildMonthPreviewRows(
 
   return monthDates(month).map((date) => {
     if (calendar.holidayDates.includes(date)) {
-      return previewRowForOffDay(date, "holiday", config, "");
+      return previewRowForOffDay(date, "holiday", config);
     }
 
     if (!isWorkingDate(date, calendar)) {
-      return previewRowForOffDay(date, "weekend", config, "");
+      return previewRowForOffDay(date, "weekend", config);
     }
 
     const detail = detailsByDate.get(date);

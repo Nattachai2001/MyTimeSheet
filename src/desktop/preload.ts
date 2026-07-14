@@ -15,7 +15,8 @@ contextBridge.exposeInMainWorld("timesheetApp", {
   loadOvertimeMonth: (month: string) => ipcRenderer.invoke("overtime:load-month", month),
   loadOvertime: (date: string) => ipcRenderer.invoke("overtime:load", date),
   saveOvertime: (payload: unknown) => ipcRenderer.invoke("overtime:save", payload),
-  removeOvertime: (date: string) => ipcRenderer.invoke("overtime:remove", date),
+  removeOvertime: (payload: string | { date: string; id?: string }) =>
+    ipcRenderer.invoke("overtime:remove", payload),
   monthSummary: (month: string) => ipcRenderer.invoke("entry:month-summary", month),
   monthPreview: (month: string) => ipcRenderer.invoke("timesheet:preview", month),
   resolveTemplate: (month: string) => ipcRenderer.invoke("timesheet:resolve-template", month),

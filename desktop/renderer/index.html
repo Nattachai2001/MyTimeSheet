@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sup Timesheet Automation</title>
+    <title>My TimeSheet</title>
     <link rel="icon" type="image/png" href="../assets/app-icon.png" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -19,7 +19,7 @@
         <div class="chrome-mark">
           <img src="../assets/app-icon.png" alt="" class="app-logo app-logo-sm" />
         </div>
-        <span>Sup Timesheet Automation</span>
+        <span>My TimeSheet</span>
       </div>
       <div class="chrome-controls">
         <button class="chrome-button" type="button" data-window-action="minimize" aria-label="Minimize">-</button>
@@ -34,7 +34,7 @@
           <img src="../assets/app-icon.png" alt="" class="app-logo app-logo-md" />
         </div>
         <div>
-          <strong>Sup Timesheet</strong>
+          <strong>My TimeSheet</strong>
           <span>Daily work capture</span>
         </div>
       </div>
@@ -92,10 +92,6 @@
         <div>
           <p class="eyebrow">Standard Hours</p>
           <h1 id="viewTitle">Daily Entry</h1>
-        </div>
-        <div id="statusText" class="status-pill" data-state="idle">
-          <span class="status-dot" aria-hidden="true"></span>
-          <span class="status-label">Ready</span>
         </div>
       </header>
 
@@ -215,11 +211,6 @@
                 Month
                 <input id="monthInput" type="month" />
               </label>
-              <button id="previousMonthButton" class="icon-button" type="button" aria-label="Previous month" title="Previous month">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
-                  <path d="M15 6 9 12l6 6" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </button>
             </div>
           </div>
 
@@ -288,12 +279,14 @@
                     Date
                     <input id="leaveDateInput" type="date" />
                   </label>
-                  <label>
+                  <label class="leave-type-field">
                     Leave type
-                    <select id="leaveTypeInput">
-                      <option value="annual">Annual leave</option>
-                      <option value="sick">Sick leave</option>
-                    </select>
+                    <div class="field-select">
+                      <select id="leaveTypeInput">
+                        <option value="annual">Annual leave</option>
+                        <option value="sick">Sick leave</option>
+                      </select>
+                    </div>
                   </label>
                   <label id="leaveHalfDayField" class="leave-half-day hidden">
                     <input id="leaveHalfDayInput" type="checkbox" />
@@ -360,11 +353,12 @@
                   </div>
                   <div class="leave-actions">
                     <button id="saveOvertimeButton" class="primary" type="button">Save OT</button>
-                    <button id="clearOvertimeButton" type="button">Clear OT</button>
+                    <button id="newOvertimeSlotButton" type="button">Add another slot</button>
+                    <button id="clearOvertimeButton" type="button">Clear slot</button>
                   </div>
                   <div class="overtime-saved-section">
                     <span class="settings-section-title">Saved this month</span>
-                    <p id="overtimeEmptyState" class="overtime-empty-state">No overtime saved yet. Fill the form above and press Save OT.</p>
+                    <p id="overtimeEmptyState" class="overtime-empty-state">No overtime saved yet. Fill the form above and press Save OT. You can add multiple time slots on the same day.</p>
                     <ul id="overtimeEntryList" class="overtime-entry-list" aria-label="Saved overtime entries"></ul>
                   </div>
                 </div>
@@ -442,8 +436,28 @@
                   <button id="refreshSummaryButton" type="button">Refresh Summary</button>
                 </div>
                 <div class="actions actions-output">
-                  <button id="openOutputButton" type="button" disabled>Open Excel</button>
-                  <button id="openPdfButton" type="button" disabled>Open PDF</button>
+                  <button id="openOutputButton" class="open-excel-btn" type="button" disabled>Open Excel</button>
+                  <button id="openPdfButton" class="open-pdf-btn" type="button" disabled>Open PDF</button>
+                </div>
+              </div>
+
+              <div id="generateProgress" class="generate-progress hidden" role="status" aria-live="polite">
+                <div id="generateProgressBody" class="generate-progress-body">
+                  <div class="generate-progress-head">
+                    <span id="generateProgressLabel">Generating timesheet...</span>
+                    <span id="generateProgressPercent">0%</span>
+                  </div>
+                  <div class="generate-progress-track" aria-hidden="true">
+                    <div id="generateProgressBar" class="generate-progress-bar"></div>
+                  </div>
+                </div>
+                <div id="generateProgressSuccess" class="generate-progress-success hidden">
+                  <span class="generate-progress-success-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                      <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </span>
+                  <span>Generate success!</span>
                 </div>
               </div>
 
@@ -485,6 +499,14 @@
             <label>
               Site
               <input id="siteInput" type="text" placeholder="e.g. Skilllane" required />
+            </label>
+            <label>
+              Role
+              <select id="roleInput" required>
+                <option value="Junior QA Consult">Junior QA Consult</option>
+                <option value="QA Consult">QA Consult</option>
+                <option value="Senior QA Consult">Senior QA Consult</option>
+              </select>
             </label>
             <label>
               Reminder time
@@ -701,7 +723,7 @@
       </div>
     </div>
 
-    <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
+    <div id="toastStack" class="toast-stack" aria-live="assertive" aria-atomic="true"></div>
 
     <script src="./pickers.js"></script>
     <script src="./renderer.js"></script>
