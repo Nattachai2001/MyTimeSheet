@@ -18,6 +18,7 @@
     "desktop": "pnpm build && electron .",
     "desktop:pack": "pnpm build && electron-builder --dir",
     "desktop:dist": "pnpm build && electron-builder",
+    "desktop:dist:ci": "pnpm build && electron-builder --publish never",
     "chrome:debug": ".\\scripts\\start-chrome-debug.cmd",
     "entry": "tsx src/cli/entry.ts",
     "slack:login": "tsx src/cli/login.ts",
@@ -56,6 +57,7 @@
   "build": {
     "appId": "com.skilllane.sup-timesheet-automation",
     "productName": "Sup Timesheet Automation",
+    "publish": null,
     "icon": "desktop/assets/app-icon.png",
     "directories": {
       "output": "release"
