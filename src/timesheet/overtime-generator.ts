@@ -5,7 +5,8 @@ import { dateToDisplay } from "../shared/date.js";
 import { OvertimeEntryInput, OvertimeFillResult } from "./overtime-types.js";
 import { applyDetailRowHeight } from "./row-height.js";
 import {
-  applyTimesheetMetadataFonts
+  applyTimesheetMetadataFonts,
+  applyTimesheetRowFonts
 } from "./timesheet-cell-style.js";
 import { cellText, detectOvertimeMapping, normalizeHeader, TimesheetTemplateMapping } from "./template-mapper.js";
 
@@ -105,6 +106,7 @@ function fillOvertimeRow(
   const detailText = entry.detail.trim();
   detailCell.value = detailText;
   applyDetailRowHeight(worksheet, row, mapping.columns.detail, detailText);
+  applyTimesheetRowFonts(row, mapping.columns);
   row.commit();
 }
 

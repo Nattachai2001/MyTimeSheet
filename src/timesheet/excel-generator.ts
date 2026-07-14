@@ -13,7 +13,7 @@ import { fillOvertimeSheet } from "./overtime-generator.js";
 import { taskCodeForDetail } from "./leave-resolver.js";
 import { OvertimeEntry, OvertimeEntryInput, OvertimeFillResult } from "./overtime-types.js";
 import { applyDetailRowHeight } from "./row-height.js";
-import { applyTimesheetMetadataFonts } from "./timesheet-cell-style.js";
+import { applyTimesheetMetadataFonts, applyTimesheetRowFonts } from "./timesheet-cell-style.js";
 import { cellText, detectTimesheetMapping } from "./template-mapper.js";
 import { repairTimesheetStylesFromTemplate } from "./xlsx-style-repair.js";
 import { readWorkbookFromPath, writeWorkbookToPath } from "./workbook-io.js";
@@ -135,6 +135,7 @@ export async function generateTimesheet(
     if (isFullDayLeave) {
       convertedHolidayRows.add(rowNumber);
     }
+    applyTimesheetRowFonts(row, mapping.columns);
     row.commit();
   }
 
@@ -159,6 +160,7 @@ export async function generateTimesheet(
       }
       const displayDate = dateToDisplay(date);
       dateCell.value = displayDate;
+      applyTimesheetRowFonts(row, mapping.columns);
       row.commit();
       continue;
     }
@@ -172,6 +174,7 @@ export async function generateTimesheet(
     clearCellValue(row.getCell(mapping.columns.hours));
     clearCellValue(row.getCell(mapping.columns.detail));
     convertedHolidayRows.add(rowNumber);
+    applyTimesheetRowFonts(row, mapping.columns);
     row.commit();
   }
 

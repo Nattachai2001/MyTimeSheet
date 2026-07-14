@@ -468,6 +468,10 @@ export function patchTimeColumnCenter(
   });
 }
 
+export function patchTimesheetFonts(stylesXml: string): string {
+  return stylesXml.replace(/val="Tahoma"/gi, 'val="Calibri"');
+}
+
 export function patchTemplateStyles(
   stylesXml: string,
   templateSheets: string[],
@@ -483,5 +487,5 @@ export function patchTemplateStyles(
 
   let patched = patchDetailWrapTextIndices(stylesXml, detailStyleIndices);
   patched = patchTimeColumnCenter(patched, templateSheets, firstDataRow);
-  return patched;
+  return patchTimesheetFonts(patched);
 }

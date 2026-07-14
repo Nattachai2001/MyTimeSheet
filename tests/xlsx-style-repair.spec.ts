@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { execSync } from "node:child_process";
 import ExcelJS from "exceljs";
-import { repairTimesheetStylesFromTemplate } from "../src/timesheet/xlsx-style-repair.js";
+import { repairTimesheetStylesFromTemplate, patchTimesheetFonts } from "../src/timesheet/xlsx-style-repair.js";
 
 const templatePath = "templates/7. Jul 2026 - TimeSheet_Template - Skilllane.xlsx";
 
@@ -141,5 +141,31 @@ describe("repairTimesheetStylesFromTemplate", () => {
     const alignment = detailStyleAlignment(styles, detailStyle!);
     expect(alignment).toContain('wrapText="1"');
     expect(alignment).toContain('vertical="top"');
+  });
+
+  it("replaces Tahoma with Calibri in styles.xml", () => {
+    const input = '<fonts><font><name val="Tahoma"/></font><font><name val="Caveat"/></font></fonts>';
+    const output = patchTimesheetFonts(input);
+    expect(output).toContain('val="Calibri"');
+    expect(output).not.toContain("Tahoma");
+    expect(output).toContain('val="Caveat"');
+  });
+
+  it.skipIf(!existsSync(templatePath))("writes Calibri fonts after style repair", async () => {
+    const outputPath = "tmp/test-repair-font.xlsx";
+    copyFileSync(templatePath, outputPath);
+
+    repairTimesheetStylesFromTemplate(templatePath, outputPath, {
+      holidayReferenceRow: 10,
+      prestyledHolidayRows: new Set([10, 11]),
+      convertedHolidayRows: new Set(),
+      firstDataRow: 7,
+      lastDataRow: 37,
+      detailColumnNumber: 8
+    });
+
+    const styles = readStylesXml(outputPath);
+    expect(styles).not.toMatch(/val="Tahoma"/i);
+    expect(styles).toContain('val="Calibri"');
   });
 });
