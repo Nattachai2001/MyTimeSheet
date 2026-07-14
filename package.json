@@ -1,0 +1,84 @@
+{
+  "name": "sup-timesheet-automation",
+  "version": "0.2.4",
+  "timesheetUpdate": {
+    "provider": "github",
+    "owner": "Nattachai2001",
+    "repo": "MyTimeSheet"
+  },
+  "description": "Desktop timesheet helper for daily work entries and SkillLane Excel generation.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json && node scripts/sync-preload.cjs",
+    "dev": "tsx src/index.ts",
+    "desktop": "pnpm build && electron .",
+    "desktop:pack": "pnpm build && electron-builder --dir",
+    "desktop:dist": "pnpm build && electron-builder",
+    "chrome:debug": ".\\scripts\\start-chrome-debug.cmd",
+    "entry": "tsx src/cli/entry.ts",
+    "slack:login": "tsx src/cli/login.ts",
+    "collect": "tsx src/cli/collect.ts",
+    "collect:range": "tsx src/cli/collect-range.ts",
+    "import:sup": "tsx src/cli/import-sup.ts",
+    "template:inspect": "tsx src/cli/template-inspect.ts",
+    "generate": "tsx src/cli/generate.ts",
+    "generate:previous-month": "tsx src/cli/generate-previous-month.ts",
+    "validate": "tsx src/cli/validate.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "date-fns": "^4.1.0",
+    "exceljs": "^4.4.0",
+    "playwright": "^1.54.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.31.0",
+    "@types/node": "^22.16.5",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "eslint": "^9.31.0",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.37.0",
+    "vitest": "^3.2.4"
+  },
+  "main": "dist/src/desktop/main.js",
+  "build": {
+    "appId": "com.skilllane.sup-timesheet-automation",
+    "productName": "Sup Timesheet Automation",
+    "icon": "desktop/assets/app-icon.png",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/**/*",
+      "templates/**/*",
+      "config/config.example.json",
+      "package.json"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

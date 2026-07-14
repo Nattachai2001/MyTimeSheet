@@ -1,0 +1,40 @@
+{
+  "slack": {
+    "workspaceUrl": "https://YOUR-WORKSPACE.slack.com",
+    "channelUrl": "https://YOUR-WORKSPACE.slack.com/archives/CHANNEL_ID",
+    "displayName": "Pluem",
+    "supBotName": "Sup!"
+  },
+  "work": {
+    "timezone": "Asia/Bangkok",
+    "defaultTimeIn": "09:00",
+    "defaultTimeOut": "18:00",
+    "includedLunchTime": "YES",
+    "workingDays": [1, 2, 3, 4, 5],
+    "holidayDates": [],
+    "extraHolidayDates": [],
+    "disabledThaiHolidaySlugs": [],
+    "excludedDates": []
+  },
+  "storage": {
+    "rootDirectory": "./data"
+  },
+  "timesheet": {
+    "staffName": "Nattachai Satitchai",
+    "site": "Skilllane",
+    "taskCode": "W1 - Test Execution",
+    "holidayTaskCode": "H1 - Holiday",
+    "annualLeaveTaskCode": "L1 - Annual Leave",
+    "sickLeaveTaskCode": "L2 - Sick Leave",
+    "role": "Junior QA Consult",
+    "defaultOvertimeTimeIn": "18:00",
+    "defaultOvertimeTimeOut": "20:00",
+    "defaultOvertimeLunch": "NO",
+    "templateFilename": "7. Jul 2026 - TimeSheet_Template - Skilllane.xlsx"
+  },
+  "browser": {
+    "headless": true,
+    "profileDirectory": "./auth/slack-profile",
+    "channel": "chrome"
+  }
+}

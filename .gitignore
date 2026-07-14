@@ -1,0 +1,15 @@
+node_modules/
+.pnpm-store/
+dist/
+coverage/
+.env
+*.local.json
+auth/
+logs/
+data/
+playwright/.auth/
+storage-state.json
+output/
+tmp/
+*.tmp
+release/

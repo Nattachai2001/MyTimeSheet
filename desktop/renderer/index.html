@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sup Timesheet Automation</title>
+    <link rel="icon" type="image/png" href="../assets/app-icon.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg-orbs" aria-hidden="true">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+    </div>
+
+    <header class="app-chrome">
+      <div class="chrome-left">
+        <div class="chrome-mark">
+          <img src="../assets/app-icon.png" alt="" class="app-logo app-logo-sm" />
+        </div>
+        <span>Sup Timesheet Automation</span>
+      </div>
+      <div class="chrome-controls">
+        <button class="chrome-button" type="button" data-window-action="minimize" aria-label="Minimize">-</button>
+        <button class="chrome-button" type="button" data-window-action="maximize" aria-label="Maximize">□</button>
+        <button class="chrome-button close" type="button" data-window-action="close" aria-label="Close">×</button>
+      </div>
+    </header>
+
+    <aside id="appSidebar" class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">
+          <img src="../assets/app-icon.png" alt="" class="app-logo app-logo-md" />
+        </div>
+        <div>
+          <strong>Sup Timesheet</strong>
+          <span>Daily work capture</span>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <div class="nav-indicator" aria-hidden="true"></div>
+        <button class="nav-item active" data-view="entryView">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+          </span>
+          <span>Entry</span>
+        </button>
+        <button class="nav-item" data-view="generateView">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+              <path d="M16 2v4M8 2v4M3 10h18" />
+            </svg>
+          </span>
+          <span>Timesheet</span>
+        </button>
+        <button class="nav-item" data-view="settingsView">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"
+              />
+            </svg>
+          </span>
+          <span>Settings</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <span id="settingsHint">Settings autosave</span>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <div id="updateBanner" class="update-banner hidden" role="status">
+        <div class="update-banner-copy">
+          <p class="eyebrow">Update available</p>
+          <p id="updateBannerText">A newer version is ready to download.</p>
+        </div>
+        <div class="update-banner-actions">
+          <button id="downloadUpdateButton" class="primary" type="button">Download</button>
+          <button id="dismissUpdateButton" type="button">Dismiss</button>
+        </div>
+      </div>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Standard Hours</p>
+          <h1 id="viewTitle">Daily Entry</h1>
+        </div>
+        <div id="statusText" class="status-pill" data-state="idle">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span class="status-label">Ready</span>
+        </div>
+      </header>
+
+      <section id="entryView" class="view active" data-title="Daily Entry">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Capture Work</h2>
+              <p>Sup! standup format — text maps to Excel working-day details.</p>
+            </div>
+            <div class="date-controls entry-date-controls">
+              <label>
+                Report date
+                <input id="entryDate" type="date" />
+              </label>
+              <button id="todayButton" class="icon-button" type="button" aria-label="Today" title="Today">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="16" rx="2" />
+                  <path d="M8 3v4M16 3v4M3 10h18" stroke-linecap="round" />
+                  <circle cx="12" cy="15" r="1.6" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+              <button id="loadEntryButton" class="icon-button" type="button" aria-label="Reload" title="Reload">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" aria-hidden="true">
+                  <path d="M20 12a8 8 0 1 1-2.2-5.5" stroke-linecap="round" />
+                  <path d="M20 4v5h-5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="metrics">
+            <div>
+              <span>Yesterday items</span>
+              <strong id="yesterdayCount">0</strong>
+            </div>
+            <div>
+              <span>Today items</span>
+              <strong id="todayCount">0</strong>
+            </div>
+            <div>
+              <span>Last saved</span>
+              <strong id="lastSavedText">-</strong>
+            </div>
+          </div>
+
+          <div class="tag-toolbar">
+            <div class="tag-group">
+              <span class="tag-toolbar-label">Default tags</span>
+              <div class="tag-buttons" id="tagButtonsDefault"></div>
+            </div>
+            <div class="tag-group" id="tagGroupSaved">
+              <span class="tag-toolbar-label">Saved tags</span>
+              <div class="tag-buttons" id="tagButtonsSaved"></div>
+            </div>
+            <div id="tagSummary" class="tag-summary">No tags yet — use [Meeting] format or tap a button above</div>
+          </div>
+
+          <div class="entry-grid">
+            <label class="entry-field">
+              Yesterday (completed work)
+              <div class="textarea-shell">
+                <div id="yesterdayHighlight" class="textarea-highlight" aria-hidden="true"></div>
+                <textarea id="yesterdayInput" spellcheck="true" placeholder="[Meeting]&#10;Sprint planning"></textarea>
+              </div>
+            </label>
+            <label class="entry-field">
+              Today (planned work)
+              <div class="textarea-shell">
+                <div id="todayHighlight" class="textarea-highlight" aria-hidden="true"></div>
+                <textarea id="todayInput" spellcheck="true" placeholder="[Develop]&#10;Test script migration"></textarea>
+              </div>
+            </label>
+          </div>
+
+          <div class="actions entry-actions">
+            <button id="saveEntryButton" class="primary action-button" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+                <path d="M17 21v-8H7v8M7 3v5h8" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span>Save Entry</span>
+            </button>
+            <button id="importSupButton" class="import-sup-button action-button" type="button">
+              <span class="import-sup-icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 2.5v7.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                  <path d="M5.4 7.1 8 9.7l2.6-2.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M3.5 12.5h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                </svg>
+              </span>
+              <span class="import-sup-label">Import Sup!</span>
+            </button>
+            <button id="clearEntryButton" class="icon-button" type="button" aria-label="Clear" title="Clear">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M8 7l1 12a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1l1-12" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+            <button id="openStorageButton" class="icon-button" type="button" aria-label="Open data folder" title="Open Data Folder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M3 8.5A2.5 2.5 0 0 1 5.5 6H9l2 2h7.5A2.5 2.5 0 0 1 21 10.5v6A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-8Z" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section id="generateView" class="view" data-title="Timesheet">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Generate Timesheet</h2>
+              <p>Review the month, preview details, then export the SkillLane Excel/PDF.</p>
+            </div>
+            <div class="date-controls">
+              <label>
+                Month
+                <input id="monthInput" type="month" />
+              </label>
+              <button id="previousMonthButton" class="icon-button" type="button" aria-label="Previous month" title="Previous month">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                  <path d="M15 6 9 12l6 6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="timesheet-steps">
+            <section class="timesheet-step" data-step="1">
+              <div class="timesheet-step-header">
+                <span class="step-number">1</span>
+                <div>
+                  <h3>Review month</h3>
+                  <p>Check working-day status before generating files.</p>
+                </div>
+              </div>
+
+              <div class="template-banner">
+                <div>
+                  <span class="template-banner-label">Template for this month</span>
+                  <div class="template-line">
+                    <span id="templateStatusBadge" class="cloud-badge checking">Checking</span>
+                    <code id="templateFileName">-</code>
+                  </div>
+                  <details class="template-path-details">
+                    <summary>Show path</summary>
+                    <code id="templatePathText">-</code>
+                  </details>
+                </div>
+                <div>
+                  <span class="template-banner-label">Output files</span>
+                  <code id="outputNameText">-</code>
+                </div>
+              </div>
+
+              <div class="calendar-shell">
+                <div id="monthSummary" class="month-summary"></div>
+                <div class="calendar-footer">
+                  <div class="calendar-legend" aria-label="Calendar status legend">
+                    <span class="legend-chip saved">Saved</span>
+                    <span class="legend-chip missing">Pending</span>
+                    <span class="legend-chip holiday">Holiday</span>
+                    <span class="legend-chip annual">AL</span>
+                    <span class="legend-chip sick">SL</span>
+                    <span class="legend-chip today">Today</span>
+                  </div>
+                  <p class="calendar-hint">Dbl-click = leave · Click pending = Entry</p>
+                </div>
+              </div>
+            </section>
+
+            <section class="timesheet-step" data-step="2">
+              <div class="timesheet-step-header">
+                <span class="step-number">2</span>
+                <div>
+                  <h3>Leave &amp; overtime</h3>
+                  <p>Record leave or overtime for working days in this month.</p>
+                </div>
+              </div>
+              <div class="timesheet-adjustments">
+              <div class="leave-panel">
+                <div class="sub-panel-header">
+                  <div>
+                    <h4>Leave</h4>
+                    <p>Annual or sick leave on a working day.</p>
+                  </div>
+                </div>
+                <div class="leave-form">
+                  <label>
+                    Date
+                    <input id="leaveDateInput" type="date" />
+                  </label>
+                  <label>
+                    Leave type
+                    <select id="leaveTypeInput">
+                      <option value="annual">Annual leave</option>
+                      <option value="sick">Sick leave</option>
+                    </select>
+                  </label>
+                  <label id="leaveHalfDayField" class="leave-half-day hidden">
+                    <input id="leaveHalfDayInput" type="checkbox" />
+                    Half-day sick leave
+                  </label>
+                  <div id="leaveHalfDayPeriodField" class="leave-half-day-period hidden" role="group" aria-label="Half-day period">
+                    <span class="leave-period-label">Half-day period</span>
+                    <label class="leave-period-option">
+                      <input type="radio" name="leaveHalfDayPeriod" value="morning" checked />
+                      Morning · 09:00–12:00
+                    </label>
+                    <label class="leave-period-option">
+                      <input type="radio" name="leaveHalfDayPeriod" value="afternoon" />
+                      Afternoon · 13:00–18:00
+                    </label>
+                  </div>
+                  <label class="leave-note">
+                    Note
+                    <input id="leaveDetailInput" type="text" placeholder="Optional note for Excel detail" />
+                  </label>
+                </div>
+                <div class="leave-actions">
+                  <button id="saveLeaveButton" class="primary" type="button">Save leave</button>
+                  <button id="clearLeaveButton" type="button">Clear leave</button>
+                </div>
+              </div>
+
+              <div id="overtimePanel" class="overtime-panel">
+                <div class="sub-panel-header">
+                  <div>
+                    <h4>Overtime</h4>
+                    <p>Record extra hours worked after regular time.</p>
+                  </div>
+                  <label class="toggle-switch" aria-label="มี OT เดือนนี้">
+                    <input id="hasOvertimeCheckbox" type="checkbox" />
+                    <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                  </label>
+                </div>
+                <div id="overtimeFormPanel" class="overtime-form-panel">
+                  <div class="overtime-form leave-form">
+                    <label>
+                      Date
+                      <input id="overtimeDateInput" type="date" />
+                    </label>
+                    <label>
+                      Time in
+                      <input id="overtimeTimeInInput" type="time" value="18:00" />
+                    </label>
+                    <label>
+                      Time out
+                      <input id="overtimeTimeOutInput" type="time" value="20:00" />
+                    </label>
+                    <label class="overtime-lunch-row">
+                      Lunch included
+                      <span class="toggle-switch">
+                        <input id="overtimeLunchInput" type="checkbox" />
+                        <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                      </span>
+                    </label>
+                    <label class="leave-note">
+                      Detail
+                      <textarea id="overtimeDetailInput" rows="3" placeholder="Work done during overtime"></textarea>
+                    </label>
+                  </div>
+                  <div class="leave-actions">
+                    <button id="saveOvertimeButton" class="primary" type="button">Save OT</button>
+                    <button id="clearOvertimeButton" type="button">Clear OT</button>
+                  </div>
+                  <div class="overtime-saved-section">
+                    <span class="settings-section-title">Saved this month</span>
+                    <p id="overtimeEmptyState" class="overtime-empty-state">No overtime saved yet. Fill the form above and press Save OT.</p>
+                    <ul id="overtimeEntryList" class="overtime-entry-list" aria-label="Saved overtime entries"></ul>
+                  </div>
+                </div>
+              </div>
+              </div>
+            </section>
+
+            <section class="timesheet-step" data-step="3">
+              <div class="timesheet-step-header">
+                <span class="step-number">3</span>
+                <div>
+                  <h3>Preview</h3>
+                  <p>Review working-day details before generating the workbook.</p>
+                </div>
+              </div>
+              <div class="preview-panel">
+                <div class="preview-header">
+                  <div>
+                    <h3>Excel Preview</h3>
+                    <p>Review working-day details before generating the workbook.</p>
+                  </div>
+                  <button id="previewButton" type="button">Refresh Preview</button>
+                </div>
+                <div id="previewMeta" class="preview-meta">No preview loaded — click Refresh Preview or configure the template first.</div>
+                <div id="previewTable" class="preview-table-wrap excel-preview-wrap">
+                  <table class="preview-table excel-preview">
+                    <thead>
+                      <tr class="excel-col-letters">
+                        <th class="excel-corner" scope="col"></th>
+                        <th scope="col">A</th>
+                        <th scope="col">B</th>
+                        <th scope="col">C</th>
+                        <th scope="col">D</th>
+                        <th scope="col">E</th>
+                        <th scope="col">F</th>
+                        <th scope="col">G</th>
+                        <th scope="col">H</th>
+                      </tr>
+                      <tr class="excel-header-row">
+                        <th class="excel-row-header" scope="col">#</th>
+                        <th scope="col">Task Code and Task Name</th>
+                        <th scope="col">Role</th>
+                        <th scope="col">Date</th>
+                        <th scope="col">Time In</th>
+                        <th scope="col">Time Out</th>
+                        <th scope="col">Included Lunch Time</th>
+                        <th scope="col">Hours</th>
+                        <th scope="col">Detail</th>
+                      </tr>
+                    </thead>
+                    <tbody id="previewBody">
+                      <tr>
+                        <td colspan="9" class="preview-empty">No preview loaded — click Refresh Preview or configure the template first.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+
+            <section id="exportStep" class="timesheet-step" data-step="4">
+              <div class="timesheet-step-header">
+                <span class="step-number">4</span>
+                <div>
+                  <h3>Export</h3>
+                  <p>Generate, validate, and open Excel/PDF files.</p>
+                </div>
+              </div>
+              <div class="timesheet-actions">
+                <div class="actions actions-primary">
+                  <button id="generateButton" class="primary" type="button">Generate Timesheet</button>
+                </div>
+                <div class="actions actions-secondary">
+                  <button id="validateButton" type="button">Validate Workbook</button>
+                  <button id="refreshSummaryButton" type="button">Refresh Summary</button>
+                </div>
+                <div class="actions actions-output">
+                  <button id="openOutputButton" type="button" disabled>Open Excel</button>
+                  <button id="openPdfButton" type="button" disabled>Open PDF</button>
+                </div>
+              </div>
+
+              <div id="validationPanel" class="validation-panel hidden">
+                <h3>Validation</h3>
+                <div id="validationGrid" class="validation-grid"></div>
+                <ul id="validationMissingList" class="validation-missing-list"></ul>
+              </div>
+
+              <pre id="generateResult" class="result hidden">No workbook generated yet.</pre>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section id="settingsView" class="view" data-title="Settings">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>App Settings</h2>
+              <p>Changes save automatically. Point multiple installs to the same synced data folder.</p>
+            </div>
+          </div>
+
+          <div id="setupGateBanner" class="setup-gate-banner hidden" role="status">
+            <div class="setup-gate-copy">
+              <p class="eyebrow">Required setup</p>
+              <h3 id="setupGateTitle">Complete your profile before using the app</h3>
+              <p id="setupGateText">Fill Staff name and Site. Entry and Timesheet stay locked until this is done.</p>
+            </div>
+            <button id="finishSetupButton" class="primary" type="button">Save &amp; continue</button>
+          </div>
+
+          <div class="settings-grid">
+            <label>
+              Staff name
+              <input id="staffNameInput" type="text" placeholder="e.g. Nattachai Satitchai" autocomplete="name" required />
+            </label>
+            <label>
+              Site
+              <input id="siteInput" type="text" placeholder="e.g. Skilllane" required />
+            </label>
+            <label>
+              Reminder time
+              <input id="reminderTimeInput" type="time" />
+            </label>
+            <div class="wide cloud-setup-panel" id="cloudSetupPanel">
+              <div class="cloud-setup-glow" aria-hidden="true"></div>
+              <div class="cloud-setup-icon" aria-hidden="true">
+                <svg viewBox="0 0 48 48" fill="none">
+                  <path d="M24 8L38 32H10L24 8Z" fill="#3777E3" />
+                  <path d="M10 32L17 18H31L38 32H10Z" fill="#FFCF63" />
+                  <path d="M10 32H24L17 18L10 32Z" fill="#11A861" />
+                </svg>
+              </div>
+              <div class="cloud-setup-body">
+                <div class="cloud-setup-head">
+                  <span class="settings-section-title">Cloud storage</span>
+                  <span id="cloudStorageBadge" class="cloud-badge checking">Checking</span>
+                </div>
+                <p id="cloudStorageStatus" class="cloud-storage-status">Checking Google Drive...</p>
+                <ul id="cloudStorageDetails" class="cloud-sync-details"></ul>
+                <p id="cloudStorageCheckedAt" class="cloud-sync-checked-at"></p>
+                <div class="cloud-setup-actions">
+                  <button id="useGoogleDriveButton" class="cloud-btn cloud-btn-primary" type="button">
+                    <span class="cloud-btn-icon" aria-hidden="true">☁</span>
+                    Use Google Drive
+                  </button>
+                  <button id="refreshCloudSyncButton" class="cloud-btn cloud-btn-secondary" type="button">
+                    Refresh sync status
+                  </button>
+                  <button id="downloadGoogleDriveButton" class="cloud-btn cloud-btn-secondary hidden" type="button">
+                    Download Google Drive
+                  </button>
+                </div>
+              </div>
+            </div>
+            <label class="wide path-row">
+              Cloud data folder
+              <input id="storageRootInput" type="text" />
+              <button id="chooseStorageButton" type="button">Browse</button>
+            </label>
+            <label class="wide path-row">
+              Template folder
+              <input id="templatePathInput" type="text" />
+              <button id="chooseTemplateButton" type="button">Browse</button>
+            </label>
+            <div class="wide settings-section">
+              <span class="settings-section-title">Working days</span>
+              <div class="weekday-grid" id="workingDaysGrid">
+                <label class="weekday-option"><input type="checkbox" value="1" data-weekday /> Mon</label>
+                <label class="weekday-option"><input type="checkbox" value="2" data-weekday /> Tue</label>
+                <label class="weekday-option"><input type="checkbox" value="3" data-weekday /> Wed</label>
+                <label class="weekday-option"><input type="checkbox" value="4" data-weekday /> Thu</label>
+                <label class="weekday-option"><input type="checkbox" value="5" data-weekday /> Fri</label>
+                <label class="weekday-option"><input type="checkbox" value="6" data-weekday /> Sat</label>
+                <label class="weekday-option"><input type="checkbox" value="0" data-weekday /> Sun</label>
+              </div>
+            </div>
+            <div class="wide settings-section thai-holidays-panel">
+              <div class="thai-holidays-head">
+                <div>
+                  <span class="settings-section-title">Thai public holidays</span>
+                  <p id="thaiHolidayMeta" class="thai-holiday-meta">Loading official holidays...</p>
+                </div>
+                <div class="thai-holidays-actions">
+                  <span id="thaiHolidayBadge" class="cloud-badge checking">Auto</span>
+                  <button id="refreshThaiHolidaysButton" class="cloud-btn cloud-btn-secondary" type="button">
+                    Refresh
+                  </button>
+                </div>
+              </div>
+              <div class="holiday-dropdown">
+                <button
+                  id="thaiHolidayDropdownButton"
+                  class="holiday-dropdown-trigger"
+                  type="button"
+                  aria-expanded="false"
+                  aria-controls="thaiHolidayDropdownPanel"
+                >
+                  <span>Applied holidays</span>
+                  <strong id="thaiHolidaySelectionSummary">0 selected</strong>
+                </button>
+                <div id="thaiHolidayDropdownPanel" class="holiday-dropdown-panel hidden">
+                  <div class="holiday-dropdown-toolbar">
+                    <button id="thaiHolidaySelectAllButton" type="button">Select all</button>
+                    <button id="thaiHolidayClearAllButton" type="button">Clear all</button>
+                  </div>
+                  <div id="thaiHolidayCheckboxList" class="holiday-checkbox-list"></div>
+                </div>
+              </div>
+            </div>
+            <label class="wide">
+              Extra holidays
+              <textarea
+                id="holidayDatesInput"
+                rows="3"
+                placeholder="Company-specific days only&#10;2026-12-24"
+              ></textarea>
+            </label>
+            <label class="checkbox-row">
+              <input id="startAtLoginInput" type="checkbox" />
+              Start with Windows (tray only)
+            </label>
+            <div class="wide settings-section app-update-panel">
+              <span class="settings-section-title">App version</span>
+              <p id="appVersionText" class="app-version-text">Checking version...</p>
+              <button id="checkUpdateButton" class="cloud-btn cloud-btn-secondary" type="button">
+                Check for updates
+              </button>
+            </div>
+          </div>
+
+          <div class="actions settings-actions">
+            <span id="settingsAutosaveBadge" class="autosave-badge saved">All changes saved</span>
+            <button id="openStorageSettingsButton" type="button">Open Data Folder</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="mobile-nav" aria-label="Main navigation">
+      <button class="mobile-nav-item active" type="button" data-view="entryView">Entry</button>
+      <button class="mobile-nav-item" type="button" data-view="generateView">Timesheet</button>
+      <button class="mobile-nav-item" type="button" data-view="settingsView">Settings</button>
+    </nav>
+
+    <div id="setupModal" class="setup-modal hidden" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
+      <div class="setup-backdrop"></div>
+      <div class="setup-card" id="setupCard">
+        <div class="setup-card-glow" aria-hidden="true"></div>
+        <div class="setup-icon" aria-hidden="true">
+          <svg viewBox="0 0 48 48" fill="none">
+            <path d="M24 8L38 32H10L24 8Z" fill="#3777E3" />
+            <path d="M10 32L17 18H31L38 32H10Z" fill="#FFCF63" />
+            <path d="M10 32H24L17 18L10 32Z" fill="#11A861" />
+          </svg>
+        </div>
+        <p class="eyebrow">First-time setup</p>
+        <h2 id="setupTitle">Choose where to save your timesheet data</h2>
+        <p id="setupDescription" class="setup-description">
+          If Google Drive for Desktop is already syncing, the app picks
+          <code>My Drive/SupTimesheetAutomation</code> automatically. Otherwise choose Drive or this PC below.
+        </p>
+        <div id="setupStatus" class="setup-status">
+          <span id="setupStatusBadge" class="cloud-badge checking">Checking</span>
+          <span id="setupStatusText">Checking Google Drive...</span>
+        </div>
+        <div class="setup-actions">
+          <button id="setupGoogleDriveButton" class="cloud-btn cloud-btn-primary primary" type="button">
+            <span class="cloud-btn-icon" aria-hidden="true">☁</span>
+            Use Google Drive
+          </button>
+          <button id="setupLocalButton" class="cloud-btn cloud-btn-secondary" type="button">Use this PC only</button>
+          <button id="setupDownloadDriveButton" class="cloud-btn cloud-btn-outline hidden" type="button">
+            Download Google Drive
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="monthEndAlert" class="month-end-alert hidden" role="alertdialog" aria-modal="true" aria-labelledby="monthEndAlertTitle">
+      <div class="month-end-backdrop"></div>
+      <div class="month-end-card">
+        <div class="month-end-badge" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <path d="M7 4.5h14a2 2 0 0 1 2 2V23a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M9 3.5v3M19 3.5v3M6 11.5h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <circle cx="18.5" cy="18.5" r="4.5" fill="currentColor" opacity="0.18"/>
+            <path d="M18.5 16.2v2.8l1.8 1.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="eyebrow month-end-eyebrow">Month-end reminder · 10:30</p>
+        <h2 id="monthEndAlertTitle">วันนี้เป็นวันสุดท้ายของเดือน</h2>
+        <p class="month-end-copy">อย่าลืม import timeSheet จาก Sup!</p>
+        <div class="month-end-actions">
+          <button id="monthEndImportButton" class="import-sup-button" type="button">
+            <span class="import-sup-icon" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M8 2.5v7.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                <path d="M5.4 7.1 8 9.7l2.6-2.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M3.5 12.5h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <span class="import-sup-label">Import Sup!</span>
+          </button>
+          <button id="monthEndDismissButton" type="button">Later</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="confirmDialog" class="confirm-dialog hidden" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <div class="confirm-backdrop"></div>
+      <div class="confirm-card">
+        <p id="confirmTitle" class="eyebrow">Confirm action</p>
+        <h2 id="confirmMessage">Continue with this action?</h2>
+        <div class="confirm-actions">
+          <button id="confirmCancel" type="button">Cancel</button>
+          <button id="confirmOk" class="primary" type="button">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="drivePickerModal" class="confirm-dialog drive-picker-modal hidden" role="dialog" aria-modal="true" aria-labelledby="drivePickerTitle">
+      <div class="confirm-backdrop" id="drivePickerBackdrop"></div>
+      <div class="confirm-card drive-picker-card">
+        <p class="eyebrow">Google Drive</p>
+        <h2 id="drivePickerTitle">Choose a Google account</h2>
+        <p class="drive-picker-copy">Pick which My Drive should store your timesheet data.</p>
+        <div id="drivePickerList" class="drive-picker-list" role="listbox" aria-labelledby="drivePickerTitle"></div>
+        <p id="drivePickerConnecting" class="drive-picker-connecting hidden" aria-live="polite"></p>
+        <div class="confirm-actions">
+          <button id="drivePickerCancel" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
+
+    <script src="./pickers.js"></script>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

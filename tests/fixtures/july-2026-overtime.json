@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "month": "2026-07",
+  "entries": [
+    {
+      "date": "2026-07-09",
+      "timeIn": "18:00",
+      "timeOut": "20:00",
+      "includedLunchTime": "NO",
+      "detail": "[Testing]\nRegression overtime"
+    }
+  ]
+}
