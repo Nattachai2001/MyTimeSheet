@@ -1,6 +1,6 @@
 {
   "name": "sup-timesheet-automation",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "timesheetUpdate": {
     "provider": "github",
     "owner": "Nattachai2001",
@@ -67,7 +67,18 @@
       "desktop/**/*",
       "templates/**/*",
       "config/config.example.json",
-      "package.json"
+      "package.json",
+      "!node_modules/playwright/**",
+      "!node_modules/@playwright/**"
+    ],
+    "asarUnpack": [
+      "**/node_modules/exceljs/**",
+      "**/node_modules/jszip/**",
+      "**/node_modules/saxes/**",
+      "**/node_modules/readable-stream/**",
+      "**/node_modules/archiver/**",
+      "**/node_modules/unzipper/**",
+      "templates/**"
     ],
     "win": {
       "signAndEditExecutable": false,

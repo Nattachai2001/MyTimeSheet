@@ -2,6 +2,9 @@ import { readFile } from "node:fs/promises";
 import ExcelJS from "exceljs";
 
 import { toFileLockError } from "../shared/file-lock-error.js";
+import { ensureExcelJsPackagedCompat } from "./exceljs-packaged-compat.js";
+
+ensureExcelJsPackagedCompat();
 
 export async function readWorkbookFromPath(workbook: ExcelJS.Workbook, filePath: string): Promise<void> {
   try {

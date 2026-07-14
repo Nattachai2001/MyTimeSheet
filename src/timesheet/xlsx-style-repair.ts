@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 const DATA_COLUMNS = new Set(["A", "B", "C", "D", "E", "F", "G", "H"]);
 
@@ -28,7 +28,8 @@ export function repairTimesheetStylesFromTemplate(
   const templateDir = join(tempRoot, "template");
 
   try {
-    extractArchive(templatePath, templateDir);
+    const templateArchivePath = materializeArchivePath(templatePath, tempRoot);
+    extractArchive(templateArchivePath, templateDir);
 
     const worksheetPath = options.worksheetPath ?? "xl/worksheets/sheet1.xml";
     const overtimeWorksheetPath = options.overtimeWorksheetPath ?? DEFAULT_OVERTIME_WORKSHEET_PATH;
@@ -185,6 +186,16 @@ function setCellStyleIndex(sheetXml: string, ref: string, styleIndex: string): s
   });
 
   return updated;
+}
+
+function materializeArchivePath(archivePath: string, tempRoot: string): string {
+  if (!archivePath.includes(".asar")) {
+    return archivePath;
+  }
+
+  const localCopy = join(tempRoot, basename(archivePath));
+  writeFileSync(localCopy, readFileSync(archivePath));
+  return localCopy;
 }
 
 function extractArchive(archivePath: string, targetDir: string): void {
